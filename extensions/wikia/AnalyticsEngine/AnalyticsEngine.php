@@ -43,10 +43,12 @@ class AnalyticsEngine {
 				return new AnalyticsProviderGoogleUA();
 			case 'Krux':
 				return new AnalyticsProviderKrux();
-			case 'A9':
-				return new AnalyticsProviderA9();
-			case 'Prebid':
-				return new AnalyticsProviderPrebid();
+			case 'BillTheLizard':
+				return new AnalyticsProviderBillTheLizard();
+			case 'MoatYi':
+				return new AnalyticsProviderMoatYi();
+			case 'Nielsen':
+				return new AnalyticsProviderNielsen();
 			case 'DynamicYield':
 				return new AnalyticsProviderDynamicYield();
 			case 'NetzAthleten':

@@ -4,8 +4,9 @@ define('ext.wikia.adEngine.wad.btRecLoader', [
 	'ext.wikia.adEngine.domElementTweaker',
 	'ext.wikia.adEngine.utils.scriptLoader',
 	'wikia.document',
+	'wikia.querystring',
 	'wikia.window'
-], function (adContext, DOMElementTweaker, scriptLoader, doc, win) {
+], function (adContext, DOMElementTweaker, scriptLoader, doc, qs, win) {
 	'use strict';
 
 	var wikiaApiController = 'AdEngine2ApiController',
@@ -14,55 +15,110 @@ define('ext.wikia.adEngine.wad.btRecLoader', [
 		placementsMap = {
 			TOP_LEADERBOARD: {
 				uid: '5b33d3584c-188',
-				style: 'margin: 10px 0;'
+				style: 'margin:10px 0; z-index:100;',
+				size: {
+					width: 728,
+					height: 90
+				},
+				lazy: false
 			},
-			TOP_RIGHT_BOXAD: {
+			TOP_BOXAD: {
 				uid: '5b2d1649b2-188',
-				style: 'margin-bottom: 10px;'
+				style: 'margin-bottom:10px; z-index:100;',
+				size: {
+					width: 300,
+					height: 250
+				},
+				lazy: false
+			},
+			INCONTENT_BOXAD_1: {
+				uid: '5bbe13967e-188',
+				style: 'z-index:100;',
+				size: {
+					width: 300,
+					height: 250
+				},
+				lazy: true
+			},
+			BOTTOM_LEADERBOARD: {
+				uid: '5b8f13805d-188',
+				style: 'margin-bottom:23px; z-index:100;',
+				size: {
+					width: 728,
+					height: 90
+				},
+				lazy: true
 			}
-		};
+		},
+		isDebug = qs().getVal('bt-rec-debug', '') === '1';
 
-	function markAdSlots(replace) {
+	function getPlacementId(slotName) {
+		return placementsMap[slotName].uid || '';
+	}
+
+	function markAdSlots() {
 		Object
 			.keys(placementsMap)
 			.forEach(function (key) {
-				var slot = doc.getElementById(key);
-
-				if (slot) {
-					if (replace) {
-						DOMElementTweaker.addClass(slot, placementClass);
-						DOMElementTweaker.setData(slot, 'uid', placementsMap[key].uid);
-						DOMElementTweaker.setData(slot, 'style', placementsMap[key].style);
-					} else {
-						var node = doc.createElement('span');
-
-						DOMElementTweaker.addClass(node, placementClass);
-						DOMElementTweaker.setData(node, 'uid', placementsMap[key].uid);
-						DOMElementTweaker.setData(node, 'style', placementsMap[key].style);
-						DOMElementTweaker.hide(node, true);
-
-						slot.parentNode.insertBefore(node, slot.previousSibling);
-					}
+				if (!placementsMap[key].lazy) {
+					duplicateSlot(key);
 				}
 			});
 	}
 
+	function duplicateSlot(slotName) {
+		var slot = doc.getElementById(slotName);
+
+		if (slot) {
+			var node = doc.createElement('span');
+
+			DOMElementTweaker.addClass(node, placementClass);
+			DOMElementTweaker.setData(node, 'uid', placementsMap[slotName].uid);
+			DOMElementTweaker.setData(node, 'style', placementsMap[slotName].style);
+
+			if (isDebug) {
+				node.style = placementsMap[slotName].style + ' width: ' + placementsMap[slotName].size.width + 'px; height: '
+					+ placementsMap[slotName].size.height + 'px; background: #00D6D6; display: inline-block;';
+			} else {
+				DOMElementTweaker.hide(node, true);
+			}
+
+			slot.parentNode.insertBefore(node, slot.previousSibling);
+
+			return node;
+		}
+
+		return false;
+	}
+
 	function injectScript() {
+		markAdSlots();
+
 		var url = win.wgCdnApiUrl + '/wikia.php?controller=' + wikiaApiController + '&method=' + wikiaApiMethod;
 
-		scriptLoader.loadScript(url, {
-			isAsync: false,
-			node: doc.head.lastChild
-		});
+		if (!isDebug) {
+			scriptLoader.loadScript(url, {
+				isAsync: false,
+				node: doc.head.lastChild,
+				onLoad: triggerScript
+			});
+		}
+	}
+
+	function triggerScript() {
+		if (!isDebug && win && win.BT && win.BT.clearThrough) {
+			win.BT.clearThrough();
+		}
 	}
 
 	function init() {
-		markAdSlots(false);
-
 		doc.addEventListener('bab.blocking', injectScript);
 	}
 
 	return {
-		init: init
+		duplicateSlot: duplicateSlot,
+		getPlacementId: getPlacementId,
+		init: init,
+		triggerScript: triggerScript
 	};
 });

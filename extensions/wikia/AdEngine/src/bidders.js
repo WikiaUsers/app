@@ -4,28 +4,39 @@ export function getBiddersContext(skin) {
 				enabled: false,
 				timeout: 2000,
 				a9: {
+					dealsEnabled: false,
 					enabled: false,
 					videoEnabled: false,
 					amazonId: '3115',
 					slots: {
-						BOTTOM_LEADERBOARD: [
-							[728, 90],
-							[970, 250]
-						],
-						INCONTENT_BOXAD_1: [
-							[300, 250],
-							[300, 600]
-						],
-						TOP_LEADERBOARD: [
-							[728, 90],
-							[970, 250]
-						],
-						TOP_RIGHT_BOXAD: [
-							[300, 250],
-							[300, 600]
-						]
-					},
-					slotsVideo: ['FEATURED']
+						BOTTOM_LEADERBOARD: {
+							sizes: [
+								[728, 90],
+								[970, 250]
+							]
+						},
+						INCONTENT_BOXAD_1: {
+							sizes: [
+								[300, 250],
+								[300, 600]
+							]
+						},
+						TOP_LEADERBOARD: {
+							sizes: [
+								[728, 90],
+								[970, 250]
+							]
+						},
+						TOP_RIGHT_BOXAD: {
+							sizes: [
+								[300, 250],
+								[300, 600]
+							]
+						},
+						FEATURED: {
+							type: 'video'
+						}
+					}
 				},
 				prebid: {
 					enabled: false,
@@ -108,45 +119,10 @@ export function getBiddersContext(skin) {
 						debugPlacementId: '5768085',
 						slots: {
 							FEATURED: {
-								placementId: '13684967',
-								context: 'instream'
+								placementId: '13684967'
 							},
 							INCONTENT_PLAYER: {
-								placementId: '11543172',
-								context: 'outstream'
-							}
-						}
-					},
-					appnexusWebads: {
-						enabled: false,
-						slots: {
-							TOP_LEADERBOARD: {
-								placementId: '13104394',
-								sizes: [
-									[728, 90],
-									[970, 250]
-								]
-							},
-							TOP_RIGHT_BOXAD: {
-								placementId: '13104393',
-								sizes: [
-									[300, 250],
-									[300, 600]
-								]
-							},
-							BOTTOM_LEADERBOARD: {
-								placementId: '13104395',
-								sizes: [
-									[728, 90],
-									[970, 250]
-								]
-							},
-							INCONTENT_BOXAD_1: {
-								placementId: '12939349',
-								sizes: [
-									[120, 600],
-									[160, 600]
-								]
+								placementId: '11543172'
 							}
 						}
 					},
@@ -207,6 +183,15 @@ export function getBiddersContext(skin) {
 						enabled: false,
 						slots: {}
 					},
+					lkqd: {
+						enabled: false,
+						slots: {
+							FEATURED: {
+								placementId: '523',
+								siteId: '890798'
+							}
+						}
+					},
 					onemobile: {
 						enabled: false,
 						slots: {}
@@ -250,6 +235,14 @@ export function getBiddersContext(skin) {
 						enabled: false,
 						publisherId: '156260',
 						slots: {
+							FEATURED: {
+								sizes: [
+									[0, 0]
+								],
+								ids: [
+									'1636185@0x0'
+								]
+							},
 							TOP_LEADERBOARD: {
 								sizes: [
 									[728, 90],
@@ -395,8 +388,14 @@ export function getBiddersContext(skin) {
 					wikiaVideo: {
 						enabled: false,
 						slots: {
-							FEATURED: {},
-							INCONTENT_PLAYER: {}
+							FEATURED: {
+								videoAdUnitId: '/5441/wka.life/_project43//article/test/outstream',
+								customParams: 's1=_project43&artid=402&src=test&pos=outstream&passback=wikiaVideo'
+							},
+							INCONTENT_PLAYER: {
+								videoAdUnitId: '/5441/wka.life/_project43//article/test/outstream',
+								customParams: 's1=_project43&artid=402&src=test&pos=outstream&passback=wikiaVideo'
+							}
 						}
 					}
 				}

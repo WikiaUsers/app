@@ -939,11 +939,14 @@ $wgCapitalLinkOverrides = [];
 $wgCapitalLinks = true;
 
 /**
- * Image repository for FancyCaptch
+ * Amazon's S3 storage with captcha files
  * @see extensions/wikia/Captcha/Module/FancyCaptcha.class.php
- * @var string $wgCaptchaDirectory
+ * @see SUS-5790
+ * @var string $wgCaptchaS3Bucket
+ * @var string $wgCaptchaS3Path
  */
-$wgCaptchaDirectory = '/usr/wikia/captchas/images-20111115';
+$wgCaptchaS3Bucket = 'fancy-captcha';
+$wgCaptchaS3Path = 'images-20111115';
 
 /**
  * Specify how category names should be sorted, when listed on a category page.
@@ -1038,14 +1041,6 @@ $wgChatPrivateServerOverride = null;
  * @var string $wgChatPublicHost
  */
 $wgChatPublicHost = 'chat.wikia-services.com:443';
-
-/**
- * Override to $wgChatPublicHost for development and testing purposes.
- * @see $wgChatPublicHost
- * @see extensions/wikia/Chat2/ChatConfig.class.php
- * @var string $wgChatPublicHostOverride
- */
-$wgChatPublicHostOverride = null;
 
 /**
  * This is a flag to determine whether or not to check file extensions on
@@ -1174,8 +1169,8 @@ $wgCompressRevisions = true;
  */
 $wgConsulDataCenters = [
 	'dev' => [
-		'sjc-dev',
-		'poz-dev',
+		'sjc',
+		'poz',
 	],
 	'prod' => [
 		'sjc',
@@ -1198,13 +1193,6 @@ $wgConsulDataCenters = [
 		'res',
 	],
 ];
-
-/**
- * Slack webhook URL for JavaScript Review Tool.
- * @see extensions/wikia/ContentReview
- * @var string $wgContentReviewSlackWebhook
- */
-$wgContentReviewSlackWebhook = 'https://hooks.slack.com/services/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';
 
 /**
  * Default cookie expiration time. Setting to 0 makes all cookies session-only.
@@ -1275,25 +1263,6 @@ $wgCountTotalSearchHits = false;
  * @var string $wgCreateDatabaseActiveCluster
  */
 $wgCreateDatabaseActiveCluster = 'c7';
-
-/**
- * Whether to create new non-English wikis with the language code as a component of the URL path, rather than a subdomain.
- * @var bool $wgCreateLanguageWikisWithPath
- */
-$wgCreateLanguageWikisWithPath = false;
-
-/**
- * Whether to create new English wikis under the fandom.com domain.
- * @var bool $wgCreateEnglishWikisOnFandomCom
- */
-$wgCreateEnglishWikisOnFandomCom = false;
-
-/**
- * Wiki description enter by the user on the CNW page. Removed after wiki is created
- * @see extensions/wikia/CreateNewWiki/maintenance/setMainPageContent.php
- * @var string $wgWikiDescription
- */
-$wgWikiDescription = '';
 
 /**
  * Domains that should not be allowed to make AJAX requests,
@@ -1969,6 +1938,14 @@ $wgDnsBlacklistUrls = [ 'http.dnsbl.sorbs.net.' ];
 $wgDocType = '-//W3C//DTD XHTML 1.0 Transitional//EN';
 
 /**
+ * Used to set a date when migrating a wiki to a different domain to force an
+ * updated lastmod timestamp in sitemaps.
+ * @see PLATFORM-3746
+ * @var string $wgDomainChangeDate
+ */
+$wgDomainChangeDate = null;
+
+/**
  * The URL of the document type declaration.  Ignored if $wgHtml5 is true,
  * since HTML5 has no DTD, and <!DOCTYPE html> doesn't actually have a DTD part
  * to put this variable's contents in.
@@ -2359,6 +2336,13 @@ $wgEnableCategoryGalleriesExt = true;
 $wgEnableCategoryIntersectionExt = false;
 
 /**
+ * Enable CategoryPage3 extension which replaces category pages with a SEO friendly version
+ * @see extensions/wikia/CategoryPage3/
+ * @var bool $wgEnableCategoryPage3Ext
+ */
+$wgEnableCategoryPage3Ext = true;
+
+/**
  * Enable CategoryTree extension.
  * @see /extensions/CategoryTree/
  * @var bool wgEnableCategoryTreeExt
@@ -2527,13 +2511,6 @@ $wgEnableCustom404PageExt = null;
 $wgEnableCustom404PageExtInLanguages = [ 'en' ];
 
 /**
- * Enable special handling of data tables.
- * @see includes/wikia/parser/templatetypes/handlers/DataTables.class.php
- * @var bool $wgEnableDataTablesParsing
- */
-$wgEnableDataTablesParsing = true;
-
-/**
  * Enable Embeddable Discussions extension.
  * @see extensions/wikia/EmbeddableDiscussions
  * @var bool $wgEnableDiscussions
@@ -2560,13 +2537,6 @@ $wgEnableDiscussionsLog = true;
  * @var bool $wgEnableDiscussionsNavigation
  */
 $wgEnableDiscussionsNavigation = false;
-
-/**
- * Allows submitting posts with Polls.
- * @see extensions/wikia/MercuryApi
- * @var bool $wgEnableDiscussionsPolls
- */
-$wgEnableDiscussionsPolls = true;
 
 /**
  * Enable DismissableSiteNotice extension.
@@ -2661,6 +2631,28 @@ $wgEnableFandomAppSmartBanner = false;
 $wgFandomAppSmartBannerText = null;
 
 /**
+ * configures smart banner to display custom text/link/image and target it by country an OS
+ * example value:
+ * {
+ *  "os": [
+ *      "ios",
+ *      "android"
+ *  ],
+ *  "imageUrl": "https:\/\/vignette.wikia.nocookie.net\/rybatest\/images\/7\/71\/002-send-1.svg\/revision\/latest?cb=20180711085702",
+ *  "title": "some short title",
+ *  "text": "some body text",
+ *  "linkText": "some link",
+ *  "linkUrl": "some.url.com",
+ *  "countries": [
+ *      "pl",
+ *      "us",
+ *      "au"
+ *  ]
+ * }
+ */
+$wgSmartBannerAdConfiguration = [];
+
+/**
  * Surprisingly, this variable enables FANDOM stories on search result page!
  * @see /extensions/wikia/Search/WikiaSearchController.class.php
  * @var bool $wgEnableFandomStoriesOnSearchResultPage
@@ -2680,6 +2672,13 @@ $wgEnableFastLinkCache = true;
  * @var bool $wgEnableFeedsAndPostsExt
  */
 $wgEnableFeedsAndPostsExt = false;
+
+/**
+ * Enable the Embedded Feeds module from Community Feeds
+ * @see extensions/wikia/FeedsAndPosts
+ * @var bool $wgEnableEmbeddedFeeds
+ */
+$wgEnableEmbeddedFeeds = false;
 
 /**
  * Enable FileInfoFunctions extension.
@@ -2709,13 +2708,6 @@ $wgEnableFirstContributionsExt = true;
  * @var bool $wgEnableFlagClosedAccountsExt
  */
 $wgEnableFlagClosedAccountsExt = true;
-
-/**
- * Enable FlowTracking extension (event tracking in create new page flow).
- * @see extensions/wikia/FlowTracking
- * @var bool $wgEnableFlowTracking
- */
-$wgEnableFlowTracking = true;
 
 /**
  * Enable Forum extension.
@@ -3514,7 +3506,7 @@ $wgEnableSendGridPostback = true;
  * @see extensions/wikia/SeoLinkHreflang
  * @var bool $wgEnableSeoLinkHreflangExt
  */
-$wgEnableSeoLinkHreflangExt = false;
+$wgEnableSeoLinkHreflangExt = true;
 
 /**
  * If on, the sidebar navigation links are cached for users with the current
@@ -3940,6 +3932,16 @@ $wgWikiaMobileSmartBannerConfig = [
 		'apple-itunes-app' => 'app-id=422467074',
 		'google-play-app' => 'app-id=com.wikia.app.GameGuides'
 	]
+];
+
+/**
+ * Configure RabbitMQ publisher for wiki status change events.
+ * @see extensions/wikia/WikiFactory/WikiStatusChangePublisher/WikiStatusChangeHooks
+ * @var Array $wgWikiStatusChangePublisher
+ */
+$wgWikiStatusChangePublisher = [
+	'exchange' => 'wiki-status-changed',
+	'vhost' => 'events',
 ];
 
 /**
@@ -4604,22 +4606,13 @@ $wgGalleryOptions = [
 $wgGameGuidesContentForAdmins = true;
 
 /**
- * Allow thumbnail rendering on page view. If this is false, a valid thumbnail
- * URL is still output, but no file will be created at the target location. This
- * may save some time if you have a thumb.php or 404 handler set up which is
- * faster than the regular webserver(s).
- * @var bool $wgGenerateThumbnailOnParse
- */
-$wgGenerateThumbnailOnParse = false;
-
-/**
  * Global user preferences (options) filter.
  * @see lib/Wikia/src/Factory/PreferencesFactory.php
  * @var Array $wgGlobalUserPreferenceWhiteList
  */
 $wgGlobalUserPreferenceWhiteList = [
 	'literals' => [
-		'CategoryExhibitionDisplayType',
+		'category-page-layout',
 		'CategoryExhibitionSortType',
 		'ccmeonemails',
 		'cols',
@@ -4980,6 +4973,16 @@ $wgImageLimits = [
 $wgImageMagickConvertCommand = '/usr/bin/convert';
 
 /**
+ * RabbitMQ configuration for ImageReview.
+ * @see extensions/wikia/ImageReview/ImageReviewEventsHooks.class.php
+ * @var array $wgImageReview
+ */
+$wgImageReview = [
+	'vhost' => 'dc-file-sync',
+	'exchange' => 'amq.topic',
+];
+
+/**
  * An image can be used as a thumbnail of an article if it is used less than
  * this many times.
  * @see extensions/wikia/ImageServing/drivers/ImageServingDriverMainNS.class.php
@@ -5041,6 +5044,17 @@ $wgImportTargetNamespace = null;
  * @var bool $wgIncludeLegacyJavaScript
  */
 $wgIncludeLegacyJavaScript = true;
+
+
+/**
+ * RabbitMQ configuration for Indexing Pipeline.
+ * @see extensions/wikia/IndexingPipeline/PipelineEventProducer.class.php
+ * @var array $wgIndexingPipeline
+ */
+$wgIndexingPipeline = [
+	'vhost' => 'indexer',
+	'exchange' => 'events',
+];
 
 /**
  * Internal server name as known to Squid, if different.
@@ -5160,13 +5174,6 @@ $wgJobTypesExcludedFromDefaultQueue = [];
  * @var string $wgJsMimeType
  */
 $wgJsMimeType = 'text/javascript';
-
-/**
- * Custom variables used by CreateWiki task.
- * @see /extensions/wikia/CreateNewWiki/tasks/SetCustomSettings.php
- * @var Array $wgLangCreationVariables
- */
-$wgLangCreationVariables = [];
 
 /**
  * Site language code, should be one of ./languages/Language(.*).php
@@ -5313,7 +5320,6 @@ $wgLocalDatabases = [];
  *                      container name and the container root as the zone directory.
  *   - url              Base public URL
  *   - hashLevels       The number of directory levels for hash-based division of files
- *   - thumbScriptUrl   The URL for thumb.php (optional, not recommended)
  *   - transformVia404  Whether to skip media file transformation on parse and rely on a 404
  *                      handler instead.
  *   - initialCapital   Equivalent to $wgCapitalLinks (or $wgCapitalLinkOverrides[NS_FILE],
@@ -6207,6 +6213,12 @@ $wgPageShareServices = [
 $wgPageShowWatchingUsers = false;
 
 /**
+ * Base URL used for Parsely API calls
+ * @var string $wgParselyApiUrl
+ */
+$wgParselyApiUrl = 'https://api.parsely.com/v2/';
+
+/**
  * The expiry time for the parser cache, in seconds.
  * @var int $wgParserCacheExpireTime
  */
@@ -6307,6 +6319,16 @@ $wgPasswordResetRoutes = [
 $wgPasswordSender = 'community@fandom.com';
 
 /**
+ * Phalanx RabbitMQ configuration.
+ * @see extensions/wikia/PhalanxII
+ * @var array $wgPhalanxQueue
+ */
+$wgPhalanxQueue = [
+	'vhost' => 'phalanx',
+	'exchange' => 'phalanx',
+];
+
+/**
  * Languages for which admins can create blocks and filters.
  * @var Array $wgPhalanxSupportedLanguages
  * @see extensions/wikia/PhalanxII
@@ -6356,6 +6378,19 @@ $wgPoolCounterConf = null;
  * @var Array $wgPoolCounterServers
  */
 $wgPoolCounterServers = [ 'prod.kubernetes-lb-l4.service.consul' ];
+
+/**
+ * Whether to emit more detailed debug logs for a PoolWorkArticleView
+ * Controlled by $wgPoolWorkArticleViewDebugSampleRatio
+ * @var bool $wgPoolWorkArticleViewDebugMode
+ */
+$wgPoolWorkArticleViewDebugMode = false;
+
+/**
+ * The fraction of PoolWorkArticleView executions that should be executed with more detailed logging
+ * @var float $wgPoolWorkArticleViewDebugMode
+ */
+$wgPoolWorkArticleViewDebugSampleRatio = 0.05;
 
 /**
  * Whether to preload the mediawiki.util module as blocking module in the top
@@ -6460,26 +6495,11 @@ $wgProfilePerHost = false;
 $wgProfileToDatabase = false;
 
 /**
- * Groups that should not be affected by Special:ProtectSite lockdown.
- * @see extensions/wikia/SpecialProtectSite
- * @var Array $wgProtectsiteExempt
- */
-$wgProtectsiteExempt = [ 'helper', 'staff', 'vstf' ];
-
-/**
  * Enable ProtectSiteJS extension.
  * @see extensions/wikia/ProtectSiteJS
  * @var bool $wgEnableProtectSiteJSExt
  */
 $wgEnableProtectSiteJSExt = true;
-
-/**
- * The maximum time, site can be locked by the Protectsite extension.
- * @see /extensions/wikia/SpecialProtectSite
- * @var string $wgProtectsiteLimit
- *
- */
-$wgProtectsiteLimit = '12 hours';
 
 /**
  * Big list of banned IP addresses, in the keys not the values.
@@ -6568,6 +6588,12 @@ $wgPurgeVignetteUsingSurrogateKeys = true;
 $wgPutIPinRC = true;
 
 /**
+ * Qualaroo JS files to serve our user surveys.
+ */
+$wgQualarooUrl = '//s3.amazonaws.com/ki.js/52510/gQT.js';
+$wgQualarooDevUrl = '//s3.amazonaws.com/ki.js/52510/fCN.js';
+
+/**
  * Number of rows to cache in 'querycache' table when miser mode is on.
  * @var int $wgQueryCacheLimit
  */
@@ -6579,6 +6605,18 @@ $wgQueryCacheLimit = 1000;
  * @var int $wgQueryPageDefaultLimit
  */
 $wgQueryPageDefaultLimit = 50;
+
+/**
+ * Hostname of the datacenter-local Rabbit cluster.
+ * @var string $wgRabbitHost
+ */
+$wgRabbitHost = 'prod.rabbit.service.consul';
+
+/**
+ * Port used by the datacenter-local Rabbit cluster.
+ * @var string $wgRabbitPort
+ */
+$wgRabbitPort = 5672;
 
 /**
  * Set to a filename to log rate limiter hits.
@@ -6653,7 +6691,7 @@ $wgRawHtml = false;
  * Set this to the IP address of the receiver.
  * @var string $wgRC2UDPAddress
  */
-$wgRC2UDPAddress = '10.8.34.15'; // 'irc.wikia-inc.com';
+$wgRC2UDPAddress = 'prod.irc.service.sjc.consul'; // 'irc.wikia-inc.com';
 
 /**
  * Notify external application about contributions via UDP.
@@ -7215,14 +7253,6 @@ $wgSharedPrefix = false;
  */
 $wgSharedTables = [ 'user', 'user_properties' ];
 
-/**
- * Give a path here to use thumb.php for thumbnail generation on client request,
- * instead of generating them on render and outputting a static URL. This is
- * necessary if some of your apache servers don't have read/write access to the
- * thumbnail path.
- * @var string|bool $wgSharedThumbnailScriptPath
- */
-$wgSharedThumbnailScriptPath = false;
 
 /**
  * DB name with metadata about shared directory. Set this to false if the
@@ -7862,15 +7892,6 @@ $wgThumbLimits = [ 120,150, 180, 200, 250, 300 ];
 $wgThumbnailEpoch = '20030516000000';
 
 /**
- * Give a path here to use thumb.php for thumbnail generation on client request,
- * instead of generating them on render and outputting a static URL. This is
- * necessary if some of your apache servers don't have read/write access to the
- * thumbnail path.
- * @var string|bool $wgThumbnailScriptPath
- */
-$wgThumbnailScriptPath = false;
-
-/**
  * Adjust width of upright images when parameter 'upright' is used. This allows
  * a nicer look for upright images without the need to fix the width by
  * hardcoded px in wiki sourcecode.
@@ -7957,13 +7978,6 @@ $wgUDPProfilerHost = '127.0.0.1';
  * @var string $wgUDPProfilerPort
  */
 $wgUDPProfilerPort = '3811';
-
-/**
- * Additional variables for CreateWiki task.
- * @see /extensions/wikia/CreateNewWiki/tasks/SetCustomSettings.php
- * @var Array $wgUniversalCreationVariables
- */
-$wgUniversalCreationVariables = [];
 
 /**
  * Enable the UniversalEditButton for browsers that support it (currently only
@@ -8609,13 +8623,6 @@ $wgWikiaEnableSharedHelpExt = true;
 $wgWikiaEnableSharedTalkExt = true;
 
 /**
- * Enable ProtectSite extension.
- * @see extensions/wikia/SpecialProtectSite
- * @var bool $wgWikiaEnableSpecialProtectSiteExt
- */
-$wgWikiaEnableSpecialProtectSiteExt = true;
-
-/**
  * Enable WikiFactory Redirector.
  * @see /extensions/wikia/WikiFactory/redir/SpecialWikiFactoryRedir.php
  * @var bool $wgWikiaEnableWikiFactoryRedir
@@ -8839,3 +8846,76 @@ $wgXMLMimeTypes = [
  * @var Array $wgYoukuConfig
  */
 $wgYoukuConfig['playerColor'] = 0;
+
+/**
+ * Used for test wikis copied on prod. Top articles data should use pageviews of the original wiki.
+ * @see PLATFORM-3671
+ * @var int $wgDataMartOriginalCityId
+ */
+$wgDataMartOriginalCityId = 0;
+
+/**
+ * whether or not create new wiki prompts users to alternatively create their community
+ * in the community builder (fandom creator)
+ * @see CAKE-2151
+ */
+$wgAllowCommunityBuilderCNWPrompt = true;
+
+/**
+ * Whether the community is scheduled to be migrated to a fandom.com domain, triggers a banner notification
+ * @see SEO-669
+ * @var bool $wgFandomComMigrationScheduled
+ */
+$wgFandomComMigrationScheduled = false;
+
+/**
+ * Whether the community is scheduled to be migrated to a wikia.org domain
+ * @var bool $wgWikiaOrgMigrationScheduled
+ */
+$wgWikiaOrgMigrationScheduled = false;
+
+/**
+ * Custom messages to show on the migration banner (before and after migration).
+ * @see PLATFORM-3895
+ * @var string
+ */
+$wgFandomComMigrationCustomMessageBefore = '';
+$wgFandomComMigrationCustomMessageAfter = '';
+
+/**
+ * Whether the community was migrated to a fandom.com domain, triggers a banner notification
+ * @see SEO-669
+ * @var bool $wgFandomComMigrationDone
+ */
+$wgFandomComMigrationDone = false;
+
+/**
+ * Whether we should enable tracking cookie reset page. This is needed in transition phase
+ * when we migrate wikis from .wikia.com to .fandom.com domain.
+ */
+$wgEnableResetTrackingPreferencesPage = false;
+
+/**
+ * Wether we should load the FastlyInsights extension. The extension will then add the Fastly Insights
+ * script to pages - https://insights.fastlylabs.com
+ */
+$wgEnableFastlyInsights = false;
+
+/**
+ * Whether the closed wiki page should be shown, variable set by WikiFactoryLoader for closed wikis.
+ */
+$wgIncludeClosedWikiHandler = false;
+
+/**
+ * If set, the "Watch now" button is visible and leads to the url from this variable
+ * @see IW-1470
+ * @var string
+ */
+$wgWatchShowURL = '';
+
+/**
+ * Enables EditDraftSaving extension
+ * @see SUS-79
+ * @var bool
+ */
+$wgEnableEditDraftSavingExt = false;

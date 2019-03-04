@@ -21,49 +21,6 @@ class MercuryApiController extends WikiaController {
 	}
 
 	/**
-	 * @desc Gets smart banner config from WF and cleans it up
-	 */
-	private function getSmartBannerConfig() {
-		if ( !empty( $this->wg->EnableWikiaMobileSmartBanner ) && !empty( $this->wg->WikiaMobileSmartBannerConfig ) ) {
-			$smartBannerConfig = $this->wg->WikiaMobileSmartBannerConfig;
-
-			unset( $smartBannerConfig['author'] );
-			$meta = $smartBannerConfig['meta'];
-			unset( $smartBannerConfig['meta'] );
-			$smartBannerConfig['appId'] = [
-				'ios' => str_replace( 'app-id=', '', $meta['apple-itunes-app'] ),
-				'android' => str_replace( 'app-id=', '', $meta['google-play-app'] ),
-			];
-
-			$smartBannerConfig['appScheme'] = [
-				'ios' => $meta['ios-scheme'] ?? null,
-				'android' => $meta['android-scheme'] ?? null,
-			];
-
-			return $smartBannerConfig;
-		}
-
-		return null;
-	}
-
-	/**
-	 * @desc Returns local navigation data for current wiki
-	 *
-	 * @return array
-	 */
-	private function getNavigation() {
-		$navData = $this->sendRequest( 'NavigationApi', 'getData' )->getData();
-
-		if ( !isset( $navData['navigation']['wiki'] ) ) {
-			$localNavigation = [];
-		} else {
-			$localNavigation = $navData['navigation']['wiki'];
-		}
-
-		return $localNavigation;
-	}
-
-	/**
 	 * @return Title Article Title
 	 * @throws NotFoundApiException
 	 * @throws BadRequestApiException
@@ -117,67 +74,55 @@ class MercuryApiController extends WikiaController {
 		$this->response->setFormat( WikiaResponse::FORMAT_JSON );
 	}
 
-	/**
-	 * @desc Prepares wiki variables for the current wikia
-	 */
-	private function prepareWikiVariables() {
-		$wikiVariables = $this->mercuryApi->getWikiVariables();
-		$navigation = $this->getNavigation();
+	public function getSearchPageAdsContext() {
+		$title = Title::newFromText('Search', NS_SPECIAL);
 
-		if ( empty( $navigation ) ) {
-			\Wikia\Logger\WikiaLogger::instance()->notice(
-				'Fallback to empty navigation'
-			);
-		}
+		$context = (new AdEngine2ContextService())->getContext($title, 'mercury');
+		$this->response->setFormat( WikiaResponse::FORMAT_JSON );
+		$this->response->setCacheValidity( WikiaResponse::CACHE_STANDARD );
+		$this->response->setVal( 'adsContext', $context );
+	}
 
-		$wikiVariables['localNav'] = $navigation;
-		$wikiVariables['vertical'] = WikiFactoryHub::getInstance()->getWikiVertical( $this->wg->CityId )['short'];
-		$wikiVariables['basePath'] = $this->wg->Server;
-		$wikiVariables['scriptPath'] = $this->wg->ScriptPath;
-		$wikiVariables['surrogateKey'] = Wikia::wikiSurrogateKey( $this->wg->CityId );
+	public function getMobileWikiVariables() {
+		( new CrossOriginResourceSharingHeaderHelper() )->allowWhitelistedOrigins()
+			->setAllowMethod( [ 'GET' ] )
+			->setHeaders( $this->response );
 
-		// Used to determine GA tracking
-		if ( !empty( $this->wg->IsGASpecialWiki ) ) {
-			$wikiVariables['isGASpecialWiki'] = true;
-		}
+		$wikiVariables = $this->mercuryApi->getMobileWikiVariables();
 
-		if ( !empty( $this->wg->ArticlePath ) ) {
-			$wikiVariables['articlePath'] = str_replace( '$1', '', $this->wg->ArticlePath );
-		} else {
-			$wikiVariables['articlePath'] = '/wiki/';
-		}
+		$this->response->setVal( 'data', $wikiVariables );
+		$this->response->setFormat( WikiaResponse::FORMAT_JSON );
 
-		$smartBannerConfig = $this->getSmartBannerConfig();
-		if ( !is_null( $smartBannerConfig ) ) {
-			$wikiVariables['smartBanner'] = $smartBannerConfig;
-		}
+		// cache wikiVariables for 1 minute
+		$this->response->setCacheValidity( self:: WIKI_VARIABLES_CACHE_TTL );
+	}
 
-		// get wiki image from Curated Main Pages (SUS-474)
-		$communityData = ( new CommunityDataService( $this->wg->CityId ) )->getCommunityData();
+	public function getDiscussionsWikiVariables() {
+		( new CrossOriginResourceSharingHeaderHelper() )->allowWhitelistedOrigins()
+			->setAllowMethod( [ 'GET' ] )
+			->setHeaders( $this->response );
 
-		if ( !empty( $communityData['image_id'] ) ) {
-			$url = CuratedContentHelper::getImageUrl( $communityData['image_id'], self::WIKI_IMAGE_SIZE );
-			$wikiVariables['image'] = $url;
-		}
+		$wikiVariables = $this->mercuryApi->getDiscussionsWikiVariables();
 
-		$wikiVariables['specialRobotPolicy'] = null;
-		$robotPolicy = Wikia::getEnvironmentRobotPolicy( $this->getContext()->getRequest() );
-		if ( !empty( $robotPolicy ) ) {
-			$wikiVariables['specialRobotPolicy'] = $robotPolicy;
-		}
+		$this->response->setVal( 'data', $wikiVariables );
+		$this->response->setFormat( WikiaResponse::FORMAT_JSON );
 
-		$htmlTitle = new WikiaHtmlTitle();
-		$wikiVariables['htmlTitle'] = [
-			'separator' => $htmlTitle->getSeparator(),
-			'parts' => array_values( $htmlTitle->getAllParts() ),
-		];
+		// cache wikiVariables for 1 minute
+		$this->response->setCacheValidity( self:: WIKI_VARIABLES_CACHE_TTL );
+	}
 
-		$wikiVariables['qualarooUrl'] =
-			( $this->wg->develEnvironment ) ? $this->wg->qualarooDevUrl : $this->wg->qualarooUrl;
+	public function getAnnouncementsWikiVariables() {
+		( new CrossOriginResourceSharingHeaderHelper() )->allowWhitelistedOrigins()
+			->setAllowMethod( [ 'GET' ] )
+			->setHeaders( $this->response );
 
-		\Hooks::run( 'MercuryWikiVariables', [ &$wikiVariables ] );
+		$wikiVariables = $this->mercuryApi->getAnnouncementsVariables();
 
-		return $wikiVariables;
+		$this->response->setVal( 'data', $wikiVariables );
+		$this->response->setFormat( WikiaResponse::FORMAT_JSON );
+
+		// cache wikiVariables for 1 minute
+		$this->response->setCacheValidity( self:: WIKI_VARIABLES_CACHE_TTL );
 	}
 
 	/**
@@ -189,7 +134,7 @@ class MercuryApiController extends WikiaController {
 			->setAllowMethod( [ 'GET' ] )
 			->setHeaders( $this->response );
 
-		$wikiVariables = $this->prepareWikiVariables();
+		$wikiVariables = $this->mercuryApi->getWikiVariables();;
 
 		$this->response->setVal( 'data', $wikiVariables );
 		$this->response->setFormat( WikiaResponse::FORMAT_JSON );
@@ -300,7 +245,7 @@ class MercuryApiController extends WikiaController {
 			'heroImage' => $articleAsJson->heroImage
 		];
 
-		$wikiVariables = $this->prepareWikiVariables();
+		$wikiVariables = $this->mercuryApi->getMobileWikiVariables();
 
 		$this->response->setFormat( WikiaResponse::FORMAT_JSON );
 		$this->response->setCacheValidity( WikiaResponse::CACHE_STANDARD );
@@ -310,9 +255,12 @@ class MercuryApiController extends WikiaController {
 
 	/**
 	 * @return void
+	 * @throws FatalError
+	 * @throws MWException
+	 * @throws WikiaException
 	 */
 	public function getPage() {
-		$cacheValidity = WikiaResponse::CACHE_STANDARD;
+		global $wgServer;
 
 		try {
 			$title = $this->getTitleFromRequest();
@@ -356,6 +304,7 @@ class MercuryApiController extends WikiaController {
 					$data['details'] = MercuryApiArticleHandler::getArticleDetails( $article );
 				} else {
 					$data['categories'] = [];
+					$data['languageLinks'] = [];
 					/*
 					 * Categories with empty article doesn't allow us to get details.
 					 * In this case we return mocked data that allows mercury to operate correctly. HTML title etc.
@@ -368,23 +317,31 @@ class MercuryApiController extends WikiaController {
 				// Set it before we remove the namespace from $displayTitle
 				$data['htmlTitle'] = $this->mercuryApi->getHtmlTitleForPage( $title, $displayTitle );
 
+				if ( $isMainPage && wfHttpsEnabledForURL( $wgServer ) ) {
+					$data['hreflangLinks'] = SeoLinkHreflang::getMainPageLinks();
+				}
+
 				if ( MercuryApiMainPageHandler::shouldGetMainPageData( $isMainPage ) ) {
 					$data['curatedMainPageData'] = MercuryApiMainPageHandler::getMainPageData( $this->mercuryApi );
 
 					// XW-4866 Make all main page content available on mobile to improve SEO.
 					// Temporary solution, should be removed around Q318.
 					if ( !empty( $articleData['content'] ) ) {
-						$data['article'] = $articleData;
+						$data['article']['content'] = $articleData['content'];
+						$data['article']['displayTitle'] = $articleData['displayTitle'];
+						$data['article']['heroImage'] = $articleData['heroImage'];
 						$data['article']['hasPortableInfobox'] = !empty(
-						\Wikia::getProps(
-							$title->getArticleID(),
-							PortableInfoboxDataService::INFOBOXES_PROPERTY_NAME
-						)
+							\Wikia::getProps(
+								$title->getArticleID(),
+								PortableInfoboxDataService::INFOBOXES_PROPERTY_NAME
+							)
 						);
 					}
 				} else {
 					if ( !empty( $articleData['content'] ) ) {
-						$data['article'] = $articleData;
+						$data['article']['content'] = $articleData['content'];
+						$data['article']['displayTitle'] = $articleData['displayTitle'];
+						$data['article']['heroImage'] = $articleData['heroImage'];
 						$data['article']['hasPortableInfobox'] = !empty(
 						\Wikia::getProps(
 							$title->getArticleID(),
@@ -411,21 +368,21 @@ class MercuryApiController extends WikiaController {
 					switch ( $data['ns'] ) {
 						// Handling namespaces other than content ones
 						case NS_CATEGORY:
-							$categoryMembersPage = MercuryApiCategoryHandler::getCategoryMembersPageFromRequest(
+							$categoryMembersFrom = MercuryApiCategoryHandler::getCategoryMembersFromFromRequest(
 								$this->request
 							);
+							$deprecatedCategoryMembersPage = MercuryApiCategoryHandler::getCategoryMembersPageFromRequest(
+								$this->request
+							);
+
 							$data['nsSpecificContent'] = MercuryApiCategoryHandler::getCategoryPageData(
 								$title,
-								$categoryMembersPage,
+								$categoryMembersFrom,
+								$deprecatedCategoryMembersPage,
 								$this->mercuryApi
 							);
 
-							// We don't cache subsequent pages, because there is no good way to purge them
-							// TODO remove this when icache supports surrogate keys (OPS-10115)
-							if ( $categoryMembersPage > 1 ) {
-								$cacheValidity = WikiaResponse::CACHE_DISABLED;
-							}
-
+							Wikia::setSurrogateKeysHeaders( CategoryPage3CacheHelper::getSurrogateKey( $title ) );
 							break;
 						case NS_FILE:
 							$data['nsSpecificContent'] = MercuryApiFilePageHandler::getFileContent( $title );
@@ -433,15 +390,15 @@ class MercuryApiController extends WikiaController {
 						default:
 							$data = array_merge(
 								$data,
-								MercuryApiArticleHandler::getArticleData( $this->mercuryApi, $article )
+								!empty( $article ) ?
+									MercuryApiArticleHandler::getArticleData( $this->mercuryApi, $article ) :
+									[]
 							);
 					}
 				}
 			} elseif ( $title->getNamespace() == NS_SPECIAL ) {
 				$data['isSpecialRandom'] = $title->isSpecial('Randompage');
 			}
-
-			\Hooks::run( 'MercuryPageData', [ $title, &$data ] );
 		} catch ( WikiaHttpException $exception ) {
 			$this->response->setCode( $exception->getCode() );
 
@@ -465,7 +422,7 @@ class MercuryApiController extends WikiaController {
 		}
 
 		$this->response->setFormat( WikiaResponse::FORMAT_JSON );
-		$this->response->setCacheValidity( $cacheValidity );
+		$this->response->setCacheValidity( WikiaResponse::CACHE_STANDARD );
 		$this->response->setVal( 'data', $data );
 	}
 
@@ -513,8 +470,10 @@ class MercuryApiController extends WikiaController {
 				}
 			}
 
+			$from = MercuryApiCategoryHandler::getCategoryMembersFromFromRequest( $this->request );
 			$page = MercuryApiCategoryHandler::getCategoryMembersPageFromRequest( $this->request );
-			$data = MercuryApiCategoryHandler::getCategoryMembers( $title, $page );
+			$data = MercuryApiCategoryHandler::getCategoryMembers( $title, $from, $page );
+			Wikia::setSurrogateKeysHeaders( CategoryPage3CacheHelper::getSurrogateKey( $title ) );
 		} catch ( WikiaHttpException $exception ) {
 			$this->response->setCode( $exception->getCode() );
 
@@ -531,9 +490,7 @@ class MercuryApiController extends WikiaController {
 		}
 
 		$this->response->setFormat( WikiaResponse::FORMAT_JSON );
-		// We don't cache it, because there is no easy way to purge all pages
-		// TODO start caching when icache supports surrogate keys (OPS-10115)
-		$this->response->setCacheValidity( WikiaResponse::CACHE_DISABLED );
+		$this->response->setCacheValidity( WikiaResponse::CACHE_STANDARD );
 		$this->response->setVal( 'data', $data );
 	}
 

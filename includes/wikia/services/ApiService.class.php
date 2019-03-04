@@ -44,10 +44,11 @@ class ApiService {
 	 * @param array $params API query parameters
 	 * @param string $endpoint (api.php or wikia.php, generally)
 	 * @param boolean $setUser
+	 * @param bool $internal sets requests as internal
 	 *
 	 * @return mixed API response
 	 */
-	static function foreignCall( string $dbName, array $params, string $endpoint = self::API, bool $setUser = false ) {
+	static function foreignCall( string $dbName, array $params, string $endpoint = self::API, bool $setUser = false, bool $internal = false ) {
 		// Note - this won't work the city_url contains url, as it uses http proxy to make the call.
 		// This should be fixed in PLATFORM-3486
 		$cityUrl = WikiFactory::DBtoUrl( $dbName );
@@ -57,10 +58,16 @@ class ApiService {
 			return false;
 		}
 
-		$options = [];
+		$options = [ 'headers' => [] ];
 		if ( startsWith( $cityUrl, "https://" ) ) {
 			$cityUrl = wfHttpsToHttp( $cityUrl );
-			$options[ 'headers' ] = [ 'Fastly-SSL' => 1, ];
+			$options[ 'headers' ][ 'Fastly-SSL' ] = 1;
+		}
+
+		$staging = wfGetStagingEnvForUrl( $cityUrl );
+		if ( $staging ) {
+			# TODO: remove when we're fully migrated to k8s
+			$options[ 'headers' ][ 'X-Staging' ] = $staging;
 		}
 
 		// request JSON format of API response
@@ -71,6 +78,12 @@ class ApiService {
 
 		if ( $setUser ) {
 			$options = array_merge( $options, self::loginAsUser() );
+		}
+
+		if ( $internal ) {
+			$options['external'] = 0;
+			$options['headers'][WebRequest::WIKIA_INTERNAL_REQUEST_HEADER] = 1;
+			$options['headers'][WebRequest::MW_AUTH_OK_HEADER] = 1;
 		}
 
 		// send request and parse response

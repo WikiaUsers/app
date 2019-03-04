@@ -5,13 +5,11 @@ metadata:
   namespace: prod
   labels:
     app: mediawiki-${SANDBOX_NAME}
+    type: mediawiki
 spec:
-  replicas: 5
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 2
+    type: Recreate
+    rollingUpdate: null
   progressDeadlineSeconds: 180
   selector:
     matchLabels:
@@ -20,6 +18,8 @@ spec:
     metadata:
       labels:
         app: mediawiki-${SANDBOX_NAME}
+        app_version: "${APP_VERSION}"
+        config_version: "${CONFIG_VERSION}"
     spec:
       containers:
         - name: nginx
@@ -53,7 +53,7 @@ spec:
               cpu: 100m
               memory: 50Mi
         - name: php
-          image: artifactory.wikia-inc.com/sus/mediawiki-sandbox-php:${IMAGE_TAG}
+          image: ${MEDIAWIKI_IMAGE}:${IMAGE_TAG}
           lifecycle:
             preStop:
               exec:
@@ -90,11 +90,11 @@ spec:
               value: "tcp://localhost:9999"
           resources:
             limits:
-              cpu: "6"
-              memory: 1200Mi
+              cpu: "4"
+              memory: 3Gi  # 5 fpm workers x 512 MB PHP memory limit
             requests:
-              cpu: "3"
-              memory: 800Mi
+              cpu: "2"
+              memory: 1.5Gi
         # MW log output, see K8s_LOGGING.md
         - name: logger
           image: artifactory.wikia-inc.com/sus/mediawiki-logger:latest
@@ -134,6 +134,46 @@ spec:
   - port: metrics
     path: /metrics
     interval: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mediawiki-${SANDBOX_NAME}
+  labels:
+    app: mediawiki-${SANDBOX_NAME}
+  namespace: prod
+spec:
+  jobLabel: app
+  selector:
+    matchLabels:
+      app: mediawiki-${SANDBOX_NAME}
+  namespaceSelector:
+    matchNames:
+    - prod
+  endpoints:
+  - port: main
+    path: /metrics.php
+    interval: 10s
+---
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: mediawiki-${SANDBOX_NAME}
+  namespace: prod
+  labels:
+    app: mediawiki-${SANDBOX_NAME}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mediawiki-${SANDBOX_NAME}
+  maxReplicas: ${MAX_REPLICAS}
+  minReplicas: 1
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      targetAverageUtilization: 50
 ---
 apiVersion: v1
 kind: Service

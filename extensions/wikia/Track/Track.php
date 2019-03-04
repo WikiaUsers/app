@@ -111,11 +111,27 @@ class Track {
 			$url = Track::getURL( 'view', '', $param, false );
 			$script = ( new Wikia\Template\MustacheEngine )
 				->setPrefix( dirname( __FILE__ ) . '/templates' )
-				->setData(['url' => $url, 'event-logger-url' => $urlProvider->getUrl( 'event-logger' ) ] )
+				->setData( [
+					'event-logger-url' => $urlProvider->getUrl( 'event-logger' ),
+					'trackID' => self::getTrackID(),
+					'url' => $url
+				] )
 				->render('track.mustache');
 		}
 
 		return $script;
+	}
+
+	public static function getTrackingCookiesJS() {
+		global $wgDevelEnvironment;
+
+		if ( !empty( $wgDevelEnvironment ) ) {
+			return '';
+		}
+
+		return ( new Wikia\Template\MustacheEngine )
+			->setPrefix( dirname( __FILE__ ) . '/templates' )
+			->render('tracking_cookies.mustache');
 	}
 
 	public static function event( $event_type, $param = null ) {
@@ -177,17 +193,26 @@ class Track {
 		return F::app()->wg->request->isWikiaInternalRequest() === false;
 	}
 
+	private static function getTrackID() {
+		global $wgUser;
+
+		if ( $wgUser->isLoggedIn() ) {
+			$trackID = $wgUser->getId();
+		} else {
+			$trackID = 0;
+		}
+
+		return $trackID;
+	}
+
 	/**
 	 * @static
 	 * @param array $vars
 	 * @return bool
 	 */
 	public static function addGlobalVars( Array &$vars ) {
-		global $wgUser;
+		$vars[ 'wgTrackID' ] = self::getTrackID();
 
-		if ( $wgUser->isLoggedIn() ) {
-			$vars[ 'wgTrackID' ] = $wgUser->getId();
-		}
 		return true;
 	}
 

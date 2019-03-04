@@ -2,18 +2,8 @@
 
 
 class RecirculationController extends WikiaController {
-	const DEFAULT_TEMPLATE_ENGINE = WikiaResponse::TEMPLATE_ENGINE_MUSTACHE;
-	const ALLOWED_TYPES = [ 'popular', 'shares', 'recent_popular' ];
-	const DEFAULT_TYPE = 'popular';
 
-	public function init() {
-		$type = $this->getVal( 'type' );
-		if ( in_array( $type, self::ALLOWED_TYPES ) ) {
-			$this->type = $type;
-		} else {
-			$this->type = self::DEFAULT_TYPE;
-		}
-	}
+	const DEFAULT_TEMPLATE_ENGINE = WikiaResponse::TEMPLATE_ENGINE_MUSTACHE;
 
 	public function discussionsAuthor() {
 		$this->setVal( 'post', $this->getVal( 'post' ) );
@@ -37,7 +27,7 @@ class RecirculationController extends WikiaController {
 
 		if ( RecirculationHooks::canShowDiscussions( $cityId, $ignoreWgEnableRecirculationDiscussions ) ) {
 			$discussionsDataService = new DiscussionsDataService( $cityId, $limit );
-			$posts = $discussionsDataService->getData( 'posts', $sortKey )['posts'];
+			$posts = $discussionsDataService->getPosts( $sortKey );
 
 			$discussionsUrl = "$discussionsDataService->server/d/f";
 
@@ -114,7 +104,7 @@ class RecirculationController extends WikiaController {
 		$this->response->setVal( 'sitename', $wgSitename );
 		$this->response->setVal( 'topWikiArticles', $topWikiArticles );
 		$this->response->setVal( 'wikiRecommendations',
-			WikiRecommendations::getRecommendations( $wgLanguageCode ) );
+			WikiRecommendations::getRecommendedWikis( $wgLanguageCode ) );
 		$this->response->setVal( 'canShowDiscussions', $canShowDiscussions );
 		$this->response->setVal( 'numberOfWikiArticles', $numberOfWikiArticles );
 		$this->response->setVal( 'numberOfNSArticles', $numberOfNSArticles );
@@ -124,11 +114,5 @@ class RecirculationController extends WikiaController {
 			$this->response->getView()->setTemplatePath( __DIR__ .
 			                                             '/templates/RecirculationController_FooterInternaltional.php' );
 		}
-	}
-
-	public function container( $params ) {
-		$containerId = $this->request->getVal( 'containerId' );
-		$this->response->setTemplateEngine( WikiaResponse::TEMPLATE_ENGINE_PHP );
-		$this->response->setVal( 'containerId', $containerId );
 	}
 }

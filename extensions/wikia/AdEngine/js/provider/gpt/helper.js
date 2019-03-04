@@ -10,6 +10,7 @@ define('ext.wikia.adEngine.provider.gpt.helper', [
 	'ext.wikia.adEngine.provider.gpt.googleSlots',
 	'ext.wikia.adEngine.provider.gpt.targeting',
 	'ext.wikia.adEngine.slot.service.passbackHandler',
+	'ext.wikia.adEngine.slot.service.slotRegistry',
 	'ext.wikia.adEngine.slot.service.srcProvider',
 	'ext.wikia.adEngine.slot.slotTargeting',
 	'ext.wikia.adEngine.slotTweaker',
@@ -27,6 +28,7 @@ define('ext.wikia.adEngine.provider.gpt.helper', [
 	googleSlots,
 	gptTargeting,
 	passbackHandler,
+	slotRegistry,
 	srcProvider,
 	slotTargeting,
 	slotTweaker,
@@ -99,12 +101,19 @@ define('ext.wikia.adEngine.provider.gpt.helper', [
 			slotTargetingData.passback = passbackHandler.get(slotName) || 'none';
 			slotTargetingData.wsi = slotTargeting.getWikiaSlotId(slotName, slotTargetingData.src);
 			slotTargetingData.uap = getUapId();
+			slotTargetingData.uap_c = uapContext.getCreativeId();
 			slotTargetingData.outstream = slotTargeting.getOutstreamData() || 'none';
+
+			if (['TOP_LEADERBOARD', 'BOTTOM_LEADERBOARD'].indexOf(slot.name) !== -1) {
+				slotTargetingData.xna = window.innerWidth <= 1023 ? '1' : '0';
+			}
+
 			if (adContext.get('targeting.skin') === 'oasis') {
 				slotTargetingData.rail = doc.body.scrollWidth <= 1023 ? '0' : '1';
 			}
 
 			abId = slotTargeting.getAbTestId(slotTargetingData);
+
 			if (abId) {
 				slotTargetingData.abi = abId;
 			}
@@ -115,6 +124,10 @@ define('ext.wikia.adEngine.provider.gpt.helper', [
 				getUapId() === 'none'
 			) {
 				slotTargetingData.pos = [slotTargetingData.pos, 'INCONTENT_PLAYER'];
+			}
+
+			if (slotTargetingData.pos === 'INCONTENT_PLAYER' && adContext.get('opts.incontentPlayerRail.enabled')) {
+				slotTargetingData.trackingpos = adContext.get('opts.incontentPlayerRail.trackingAlias');
 			}
 		}
 
@@ -138,7 +151,12 @@ define('ext.wikia.adEngine.provider.gpt.helper', [
 			setupPageLevelParams();
 		}
 
-		if (!slot.isEnabled()) {
+		// Don't collapse slots that have defined status
+		// because... slot tracking expects that slots is
+		// going to have DOM elements with all attributes
+		// so, in fact this slot is going to be collapsed
+		// later in googleTag.js
+		if (!slot.isEnabled() && !slotRegistry.getStatus(slotName)) {
 			log(['Push blocked', slotName], log.levels.debug, logGroup);
 			slot.collapse();
 			return;
@@ -169,6 +187,7 @@ define('ext.wikia.adEngine.provider.gpt.helper', [
 			log(['Refresh slot', slotName, slot], log.levels.debug, logGroup);
 			targeting = gptTargeting.getSlotLevelTargeting(slotName);
 			targeting.uap = uapContext.getUapId().toString();
+			targeting.uap_c = uapContext.getCreativeId().toString();
 			AdElement.configureSlot(slot, targeting);
 			googleTag.refreshSlot(slot);
 		} else {

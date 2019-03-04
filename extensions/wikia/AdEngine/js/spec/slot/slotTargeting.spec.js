@@ -41,16 +41,14 @@ describe('ext.wikia.adEngine.slot.slotTargeting', function () {
 			},
 			bidders = {
 				isEnabled: function () {
-					return false;
+					return true;
+				},
+				getPrebid: function () {
+					return mocks.pbjs;
 				}
 			},
 			instantGlobals = {
 				wgAdDriverAbTestIdTargeting: 1
-			},
-			prebid = {
-				get: function () {
-					return mocks.pbjs;
-				}
 			};
 
 		return modules['ext.wikia.adEngine.slot.slotTargeting'](
@@ -58,8 +56,7 @@ describe('ext.wikia.adEngine.slot.slotTargeting', function () {
 			modules['ext.wikia.adEngine.utils.math'](),
 			abTest,
 			instantGlobals,
-			bidders,
-            prebid
+			bidders
         );
 	}
 
@@ -70,7 +67,7 @@ describe('ext.wikia.adEngine.slot.slotTargeting', function () {
 					pageType: 'article',
 					skin: 'oasis',
 					src: 'remnant',
-					slotName: 'TOP_RIGHT_BOXAD'
+					slotName: 'TOP_BOXAD'
 				},
 				wsi: 'oma2'
 			},
@@ -82,15 +79,6 @@ describe('ext.wikia.adEngine.slot.slotTargeting', function () {
 					slotName: 'TOP_LEADERBOARD'
 				},
 				wsi: 'olar'
-			},
-			{
-				env: {
-					pageType: 'article',
-					skin: 'oasis',
-					src: 'premium',
-					slotName: 'INCONTENT_PLAYER'
-				},
-				wsi: 'oiap'
 			},
 			{
 				env: {},
@@ -149,12 +137,6 @@ describe('ext.wikia.adEngine.slot.slotTargeting', function () {
 					src: 'rec'
 				},
 				wsi: 'xxxr'
-			},
-			{
-				env: {
-					src: 'premium'
-				},
-				wsi: 'xxxp'
 			},
 			{
 				env: {

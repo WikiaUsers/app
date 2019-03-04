@@ -5,7 +5,7 @@ define('ext.wikia.adEngine.provider.gpt.adSizeFilter', [
 	'wikia.document',
 	'wikia.log',
 	'wikia.window'
-], function (bridge, abTest, doc, log, win) {
+], function (adEngineBridge, abTest, doc, log, win) {
 	'use strict';
 
 	var logGroup = 'ext.wikia.adEngine.provider.gpt.adSizeFilter',
@@ -52,12 +52,16 @@ define('ext.wikia.adEngine.provider.gpt.adSizeFilter', [
 		return slotSizes;
 	}
 
-	function removeUAPFromSlotSizes(slotSizes) {
+	function excludeSlotSizes(slotSizes, excludedSizes) {
 		return slotSizes.filter(function (size) {
 			var str = size.toString();
 
-			return !(str === '2,2' || str === '3,3');
-		});
+			return excludedSizes.indexOf(str) === -1;
+		})
+	}
+
+	function removeUAPFromSlotSizes(slotSizes) {
+		return excludeSlotSizes(slotSizes, ['2,2', '3,3']);
 	}
 
 	function getFanTakeoverBLBSizes(skin) {
@@ -69,7 +73,11 @@ define('ext.wikia.adEngine.provider.gpt.adSizeFilter', [
 	}
 
 	function getBottomLeaderboardSizes(slotSizes) {
-		return bridge.universalAdPackage.isFanTakeoverLoaded() ?
+		if (window.innerWidth < 1024) {
+			slotSizes = excludeSlotSizes(slotSizes, ['970,250']);
+		}
+
+		return adEngineBridge.universalAdPackage.isFanTakeoverLoaded() ?
 			getFanTakeoverBLBSizes(getAdContext().targeting.skin) : removeUAPFromSlotSizes(slotSizes);
 	}
 

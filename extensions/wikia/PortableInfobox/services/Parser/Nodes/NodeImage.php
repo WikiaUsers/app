@@ -33,27 +33,30 @@ class NodeImage extends Node {
 
 	public static function getTabberData( $html ) {
 		global $wgArticleAsJson;
-		$data = array();
+
+		$data = [];
 		$doc = HtmlHelper::createDOMDocumentFromText( $html );
 		$sxml = simplexml_import_dom( $doc );
 		$divs = $sxml->xpath( '//div[@class=\'tabbertab\']' );
 		foreach ( $divs as $div ) {
 			if ( $wgArticleAsJson ) {
-				if ( preg_match( '/data-ref="([^"]+)"/', $div->asXML(), $out ) ) {
-					$data[] = array( 'label' => (string) $div['title'], 'title' => \ArticleAsJson::$media[$out[1]]['title'] );
+				$figures = $div->xpath( './/figure[@data-file]' );
+				if ( count( $figures ) > 0 ) {
+					$data[] = [ 'label' => (string) $div['title'], 'title' => (string) $figures[0]['data-file'] ];
 				}
 			} else {
 				if ( preg_match( '/data-(video|image)-key="([^"]+)"/', $div->asXML(), $out ) ) {
-					$data[] = array( 'label' => (string) $div['title'], 'title' => $out[2] );
+					$data[] = [ 'label' => (string) $div['title'], 'title' => $out[2] ];
 				}
 			}
 		}
+
 		return $data;
 	}
 
 	public function getData() {
 		if ( !isset( $this->data ) ) {
-			$this->data = array();
+			$this->data = [];
 
 			// value passed to source parameter (or default)
 			$value = $this->getRawValueWithDefault( $this->xmlNode );
@@ -61,11 +64,11 @@ class NodeImage extends Node {
 			if ( $this->containsTabberOrGallery( $value ) ) {
 				$this->data = $this->getImagesData( $value );
 			} else {
-				$this->data = array( $this->getImageData(
+				$this->data = [ $this->getImageData(
 					$value,
 					$this->getValueWithDefault( $this->xmlNode->{self::ALT_TAG_NAME} ),
 					$this->getValueWithDefault( $this->xmlNode->{self::CAPTION_TAG_NAME} )
-				) );
+				) ];
 			}
 		}
 		return $this->data;
@@ -81,7 +84,7 @@ class NodeImage extends Node {
 	}
 
 	private function getImagesData( $value ) {
-		$data = array();
+		$data = [];
 		$items = array_merge( $this->getGalleryItems( $value ), $this->getTabberItems( $value ) );
 		foreach( $items as $item ) {
 			$data[] = $this->getImageData( $item['title'], $item['label'], $item['label'] );
@@ -132,7 +135,9 @@ class NodeImage extends Node {
 			'alt' => $alt,
 			'caption' => \SanitizerBuilder::createFromType( 'image' )
 				->sanitize( [ 'caption' => $caption ] )['caption'],
-			'isVideo' => false
+			'isVideo' => false,
+			'item-name' => $this->getItemName(),
+			'source' => $this->getSource(),
 		];
 
 		if ( $this->isVideo( $fileObj ) ) {

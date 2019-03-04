@@ -80,10 +80,11 @@ class WikiaRobots {
 		'/d/g',
 		// Fandom old URLs
 		'/fandom?p=',
+		//Mobile Wiki search URL
+		'/search',
 
 		// AdEngine recovery api
-		'/wikia.php?controller=AdEngine2ApiController&method=getBTCode',
-		'/wikia.php?controller=AdEngine2ApiController&method=getILCode'
+		'/wikia.php?controller=AdEngine2ApiController&method=getBTCode'
 	];
 
 	/**
@@ -130,21 +131,12 @@ class WikiaRobots {
 	 * @param PathBuilder $pathBuilder
 	 */
 	public function __construct( PathBuilder $pathBuilder ) {
-		global $wgWikiaBaseDomain,
-			   $wgRequest,
+		global $wgRequest,
 			   $wgRobotsTxtCustomRules,
-			   $wgServer,
 			   $wgWikiaEnvironment;
 
 		$this->pathBuilder = $pathBuilder;
-		$this->accessAllowed = (
-			(
-				$wgWikiaEnvironment === WIKIA_ENV_PROD &&
-				// PLATFORM-3654 temporarily disable robots on fandom.com wikis
-				wfGetBaseDomainForHost( $wgServer ) === $wgWikiaBaseDomain
-			) ||
-			$wgRequest->getBool( 'forcerobots' )
-		);
+		$this->accessAllowed = $wgWikiaEnvironment === WIKIA_ENV_PROD || $wgRequest->getBool( 'forcerobots' );
 		$this->experiment = false;
 
 		if ( isset( $wgRobotsTxtCustomRules['allowSpecialPage'] ) ) {
@@ -164,13 +156,20 @@ class WikiaRobots {
 		}
 	}
 
-	public function configureRobotsBuilder( RobotsTxt $robots ) {
+	/**
+	 * @param RobotsTxt $robots
+	 * @param bool $shallow when false, returns rules for other wikis on the same domain.
+	 * @return RobotsTxt
+	 */
+	public function configureRobotsBuilder( RobotsTxt $robots, $shallow = false ) {
 		global $wgEnableSitemapXmlExt,
 		       $wgRobotsTxtBlockedWiki,
 		       $wgSitemapXmlExposeInRobots,
 		       $wgServer,
 		       $wgScriptPath,
-		       $wgRequest;
+		       $wgRequest,
+		       $wgCityId,
+		       $wgEnableHTTPSForAnons;
 
 		if ( !$this->accessAllowed || !empty( $wgRobotsTxtBlockedWiki ) ) {
 			// No crawling preview, verify, sandboxes, showcase, etc
@@ -178,37 +177,50 @@ class WikiaRobots {
 			return $robots;
 		}
 
-		// Sitemap
-		if ( !empty( $wgEnableSitemapXmlExt ) && !empty( $wgSitemapXmlExposeInRobots ) ) {
-			$robots->addSitemap( $wgServer . $wgScriptPath . '/sitemap-newsitemapxml-index.xml' );
-		}
+		if ( \Hooks::run( 'GenerateRobotsRules', [ $wgCityId ] ) ) {
+			// Sitemap
+			if ( !empty( $wgEnableSitemapXmlExt ) && !empty( $wgSitemapXmlExposeInRobots ) ) {
+				$sitemapUrl = $wgServer . $wgScriptPath . '/sitemap-newsitemapxml-index.xml';
+				// Enforce HTTPS on wikis where it is enabled by default
+				if ( wfHttpsAllowedForURL( $sitemapUrl ) &&
+					(
+						wfHttpsEnabledForURL( $sitemapUrl ) ||
+						!empty( $wgEnableHTTPSForAnons )
+					)
+				) {
+					$sitemapUrl = wfHttpToHttps( $sitemapUrl );
+				}
+				$robots->addSitemap( $sitemapUrl );
+			}
 
-		// Block namespaces
-		foreach ( $this->blockedNamespaces as $ns ) {
-			$robots->addDisallowedPaths(
-				$this->pathBuilder->buildPathsForNamespace( $ns )
-			);
-		}
+			// Block namespaces
+			foreach ( $this->blockedNamespaces as $ns ) {
+				$robots->addDisallowedPaths(
+					$this->pathBuilder->buildPathsForNamespace( $ns )
+				);
+			}
 
-		// Block additional paths
-		$robots->addDisallowedPaths( array_map( [ $this->pathBuilder, 'buildPath' ], $this->blockedPaths ) );
+			// Block additional paths
+			$robots->addDisallowedPaths( array_map( [ $this->pathBuilder, 'buildPath' ], $this->blockedPaths ) );
 
-		// Block params
-		foreach ( $this->blockedParams as $param ) {
-			$robots->addDisallowedPaths( $this->pathBuilder->buildPathsForParam( $param ) );
-		}
+			// Block params
+			foreach ( $this->blockedParams as $param ) {
+				$robots->addDisallowedPaths( $this->pathBuilder->buildPathsForParam( $param ) );
+			}
 
-		// Allow specific paths
-		$robots->addAllowedPaths( array_map( [ $this->pathBuilder, 'buildPath' ], $this->allowedPaths ) );
+			// Allow specific paths
+			$robots->addAllowedPaths( array_map( [ $this->pathBuilder, 'buildPath' ], $this->allowedPaths ) );
 
-		// Allow special pages
-		foreach ( array_keys( $this->allowedSpecialPages ) as $page ) {
-			$robots->addAllowedPaths( $this->pathBuilder->buildPathsForSpecialPage( $page, true ) );
+			// Allow special pages
+			foreach ( array_keys( $this->allowedSpecialPages ) as $page ) {
+				$robots->addAllowedPaths( $this->pathBuilder->buildPathsForSpecialPage( $page, true ) );
+			}
 		}
 
 		// Paranoid check to make sure language wikis return only their rules without calling other
 		// wikis recursively.
-		if ( !$wgRequest->getBool( 'shallow' ) ) {
+		// TODO - remove the code below once robots are served by the robots-txt service
+		if ( !$wgRequest->getBool( 'shallow' ) && !$shallow ) {
 			// fetch from foreign wikis...
 			$languageWikis = \WikiFactory::getLanguageWikis();
 			foreach ( $languageWikis as $wiki ) {

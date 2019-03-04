@@ -213,7 +213,7 @@ class Subtitle {
 	 * @return string
 	 */
 	private function getBackArrow() {
-		return DesignSystemHelper::renderSvg( 'wds-icons-upvote-reply-tiny', 'wds-icon wds-icon-tiny page-header__subtitle-back-icon' );
+		return DesignSystemHelper::renderSvg( 'wds-icons-arrow-tiny', 'wds-icon wds-icon-tiny page-header__subtitle-back-icon' );
 	}
 
 	/**
@@ -265,7 +265,7 @@ class Subtitle {
 		$namespaceText = $language->getFormattedNsText( $this->title->getNamespace() );
 		$userBlogPageText = $namespaceText . ':' . $userName;
 
-		$pageStatsService = new PageStatsService( $this->title->getArticleId() );
+		$pageStatsService = new PageStatsService( $this->title );
 		$pageCreatedDate = $language->date( $pageStatsService->getFirstRevisionTimestamp() );
 
 		return $app->renderPartial(

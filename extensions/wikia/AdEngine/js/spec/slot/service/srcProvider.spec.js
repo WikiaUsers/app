@@ -34,7 +34,9 @@ describe('ext.wikia.adEngine.slot.service.srcProvider', function () {
 	});
 
 	it('adds test- prefix for test wikis', function () {
-		spyOn(mocks.adContext, 'get').and.returnValue(true);
+		mockContext({
+			'opts.isAdTestWiki': true
+		});
 
 		expect(getModule().get('xyz')).toBe('test-xyz');
 		expect(getModule().get('abc')).toBe('test-abc');
@@ -46,23 +48,6 @@ describe('ext.wikia.adEngine.slot.service.srcProvider', function () {
 		});
 
 		expect(getModule().get('xyz', {testSrc: 'BBB'})).toBe('BBB');
-	});
-
-	it('sets src=premium if article is premium', function () {
-		mockContext({
-			'opts.premiumOnly': true
-		});
-
-		expect(getModule().get('xyz')).toContain('premium');
-	});
-
-	it('returns test even for premium pages', function () {
-		mockContext({
-			'opts.isAdTestWiki': true,
-			'opts.premiumOnly': true
-		});
-
-		expect(getModule().get('xyz')).toBe('test-xyz');
 	});
 
 	it('doesn\'t change src to rec if ad is not recoverable', function () {
@@ -85,24 +70,6 @@ describe('ext.wikia.adEngine.slot.service.srcProvider', function () {
 		expect(getModule().get('asd')).toBe('rec');
 	});
 
-	it('sets src=premium if article is premium', function () {
-		mockContext({'opts.premiumOnly': true});
-
-		expect(getModule().get('asd', {})).toContain('premium');
-
-	});
-
-	it('change src to rec if on premium pages', function () {
-		mockContext({
-			'targeting.skin': 'oasis',
-			'opts.premiumOnly': true
-		});
-
-		spyOn(mocks.babDetection, 'isBlocking').and.returnValue(true);
-
-		expect(getModule().get('asd')).toBe('rec');
-	});
-
 	it('overrides src=rec for test wiki', function () {
 		mockContext({
 			'targeting.skin': 'oasis',
@@ -112,11 +79,6 @@ describe('ext.wikia.adEngine.slot.service.srcProvider', function () {
 		spyOn(mocks.babDetection, 'isBlocking').and.returnValue(true);
 
 		expect(getModule().get('abc')).toBe('test-rec');
-	});
-
-	it('doesn\'t set src=premium if article isn\'t premium', function () {
-		mockContext({'opts.premiumOnly': false});
-		expect(getModule().get('abc')).not.toBe('premium');
 	});
 
 	it('returns by default rec as src value for rec', function () {
@@ -129,5 +91,14 @@ describe('ext.wikia.adEngine.slot.service.srcProvider', function () {
 		});
 
 		expect(getModule().getRecSrc()).toBe('test-rec');
+	});
+
+	it('returns srcTest from WF config preserving original one', function () {
+		mockContext({
+			'opts.isAdTestWiki': true,
+			'targeting.testSrc': 'externaltest'
+		});
+
+		expect(getModule().get('gpt')).toEqual(['gpt', 'externaltest']);
 	});
 });

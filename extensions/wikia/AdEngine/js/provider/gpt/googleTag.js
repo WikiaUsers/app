@@ -1,7 +1,7 @@
 /*global define*/
 /*jshint maxlen:125, camelcase:false, maxdepth:7*/
 define('ext.wikia.adEngine.provider.gpt.googleTag', [
-	'ext.wikia.adEngine.bridge',
+	'ext.wikia.adEngine',
 	'ext.wikia.adEngine.provider.gpt.googleSlots',
 	'ext.wikia.adEngine.slot.adSlot',
 	'ext.wikia.adEngine.slot.service.slotRegistry',
@@ -10,7 +10,7 @@ define('ext.wikia.adEngine.provider.gpt.googleTag', [
 	'wikia.log',
 	'wikia.trackingOptIn',
 	'wikia.window'
-], function (bridge, googleSlots, adSlot, slotRegistry, srcProvider, doc, log, trackingOptIn, win) {
+], function (adEngine3, googleSlots, adSlot, slotRegistry, srcProvider, doc, log, trackingOptIn, win) {
 	'use strict';
 
 	var logGroup = 'ext.wikia.adEngine.provider.gpt.googleTag',
@@ -22,10 +22,22 @@ define('ext.wikia.adEngine.provider.gpt.googleTag', [
 	win.googletag.cmd = win.googletag.cmd || [];
 
 	function collapseIfSlotHasViewportConflicts(slotName) {
-		var slot = bridge.slotService.get(slotName);
+		var slot = adEngine3.slotService.get(slotName);
 
-		if (bridge.slotService.hasViewportConflict(slot)) {
+		if (adEngine3.slotService.hasViewportConflict(slot)) {
 			slot.collapse({ adType: 'viewport-conflict' });
+
+			return true;
+		}
+
+		return false;
+	}
+
+	function collapseIfSlotIsDisabled(slotName) {
+		var slot = slotRegistry.get(slotName);
+
+		if (!slotRegistry.isEnabled(slotName)) {
+			slot.collapse({ adType: slotRegistry.getStatus(slotName) });
 
 			return true;
 		}
@@ -35,7 +47,7 @@ define('ext.wikia.adEngine.provider.gpt.googleTag', [
 
 	function dispatchEvent(event, methodName) {
 		var slot,
-			slotName = adSlot.getShortSlotName(event.slot.getName());
+			slotName = adSlot.getShortSlotName(event.slot.getAdUnitPath());
 
 		log(['dispatchEvent', event], log.levels.info, logGroup);
 		slot = slotRegistry.get(slotName);
@@ -61,6 +73,9 @@ define('ext.wikia.adEngine.provider.gpt.googleTag', [
 			win.googletag.pubads().collapseEmptyDivs();
 			win.googletag.pubads().enableSingleRequest();
 			win.googletag.pubads().disableInitialLoad(); // manually request ads using refresh
+			win.googletag.pubads().addEventListener('slotOnload', function (event) {
+				dispatchEvent(event, 'loaded');
+			});
 			win.googletag.pubads().addEventListener('slotRenderEnded', function (event) {
 				dispatchEvent(event, 'renderEnded');
 			});
@@ -149,14 +164,15 @@ define('ext.wikia.adEngine.provider.gpt.googleTag', [
 		var defaultSizes = adElement.getDefaultSizes(),
 			sizeMap = adElement.getSizes(),
 			slotId = adElement.getId(),
-			slot = googleSlots.getSlot(slotId);
+			slot = googleSlots.getSlot(slotId),
+			slotName = adElement.getSlotName();
 
 		log(['addSlot', adElement], log.levels.debug, logGroup);
 
 		adElement.setPageLevelParams(pageLevelParams);
 		adElement.setSlotLevelParams();
 
-		if (collapseIfSlotHasViewportConflicts(adElement.getSlotName())) {
+		if (collapseIfSlotIsDisabled(slotName) || collapseIfSlotHasViewportConflicts(slotName)) {
 			return;
 		}
 
@@ -226,7 +242,7 @@ define('ext.wikia.adEngine.provider.gpt.googleTag', [
 				} else {
 					if (slotsNames.indexOf(slotsPositionTargeting[0]) > -1) {
 						slotsToDestroy.push(slot);
-						bridge.slotService.clearSlot(slotsPositionTargeting[0]);
+						adEngine3.slotService.clearSlot(slotsPositionTargeting[0]);
 					}
 				}
 			});

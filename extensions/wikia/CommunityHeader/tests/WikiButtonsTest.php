@@ -31,7 +31,7 @@ class WikiButtonsTest extends \WikiaBaseTest {
 
 		$this->mockStaticMethod( 'RequestContext', 'getMain', $requestContextMock );
 
-		$wikiButtons = new WikiButtons();
+		$wikiButtons = new WikiButtons( new DesignSystemCommunityHeaderModel('en'));
 
 		$this->assertEquals( $expected, $wikiButtons->buttons );
 	}
@@ -88,7 +88,7 @@ class WikiButtonsTest extends \WikiaBaseTest {
 							'type' => 'translatable-text',
 							'key' => 'community-header-add-new-page',
 						],
-						'icon' => 'wds-icons-article-small',
+						'icon' => 'wds-icons-page-small',
 						'tracking' => 'add-new-page',
 						'additionalClasses' => 'createpage',
 					],
@@ -108,7 +108,7 @@ class WikiButtonsTest extends \WikiaBaseTest {
 							'type' => 'translatable-text',
 							'key' => 'community-header-add-new-page',
 						],
-						'icon' => 'wds-icons-article-small',
+						'icon' => 'wds-icons-page-small',
 						'tracking' => 'add-new-page',
 						'additionalClasses' => 'createpage',
 					],
@@ -136,7 +136,7 @@ class WikiButtonsTest extends \WikiaBaseTest {
 							'type' => 'translatable-text',
 							'key' => 'community-header-add-new-page',
 						],
-						'icon' => 'wds-icons-article-small',
+						'icon' => 'wds-icons-page-small',
 						'tracking' => 'add-new-page',
 						'additionalClasses' => 'createpage',
 					],

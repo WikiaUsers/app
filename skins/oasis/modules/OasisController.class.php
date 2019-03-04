@@ -54,11 +54,13 @@ class OasisController extends WikiaController {
 		// initialize variables
 		$this->trackingOptIn = TrackingOptIn::renderScript();
 		// FIXME SUS-4812 get this out of here
+		$this->trackingCookies = Track::getTrackingCookiesJS();
 		$this->internalTracker = Track::getViewJS();
 		$this->comScore = null;
 		$this->quantServe = null;
-		$this->a9 = null;
-		$this->prebid = null;
+		$this->billTheLizard = null;
+		$this->moatYi = null;
+		$this->nielsen = null;
 		$this->il = null;
 		$this->dynamicYield = null;
 		$this->krux = null;
@@ -144,6 +146,7 @@ class OasisController extends WikiaController {
 		Hooks::run( 'WikiaAssetsPackages', [ $wgOut, &$jsPackages, &$scssPackages ] );
 
 		$this->isUserLoggedIn = $wgUser->isLoggedIn();
+		$this->cookieSyncEnabled = AutoLoginService::cookieSyncEnabled( $request );
 
 		// TODO: move to CreateNewWiki extension - this code should use a hook
 		$wikiWelcome = $request->getVal('wiki-welcome');
@@ -243,9 +246,9 @@ class OasisController extends WikiaController {
 		if ( !in_array( $request->getVal( 'action' ), [ 'edit', 'submit' ] ) ) {
 			$this->comScore = AnalyticsEngine::track('Comscore', AnalyticsEngine::EVENT_PAGEVIEW);
 			$this->quantServe = AnalyticsEngine::track('QuantServe', AnalyticsEngine::EVENT_PAGEVIEW);
-			$this->a9 = AnalyticsEngine::track('A9', AnalyticsEngine::EVENT_PAGEVIEW);
-			$this->prebid = AnalyticsEngine::track('Prebid', AnalyticsEngine::EVENT_PAGEVIEW);
-			$this->il = AdEngine2Controller::getILBootstrapCode();
+			$this->billTheLizard = AnalyticsEngine::track('BillTheLizard', AnalyticsEngine::EVENT_PAGEVIEW);
+			$this->moatYi = AnalyticsEngine::track('MoatYi', AnalyticsEngine::EVENT_PAGEVIEW);
+			$this->nielsen = AnalyticsEngine::track('Nielsen', AnalyticsEngine::EVENT_PAGEVIEW);
 			$this->dynamicYield = AnalyticsEngine::track('DynamicYield', AnalyticsEngine::EVENT_PAGEVIEW);
 			$this->krux = AnalyticsEngine::track('Krux', AnalyticsEngine::EVENT_PAGEVIEW);
 			$this->netzathleten = AnalyticsEngine::track('NetzAthleten', AnalyticsEngine::EVENT_PAGEVIEW);

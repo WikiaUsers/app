@@ -3,16 +3,6 @@
 #  Overwrite some variables, load extensions, etc. Former CustomSettings.php  #
 ###############################################################################
 
-###############################################################################
-# DC specific settings                                                        #
-###############################################################################
-switch ($wgWikiaDatacenter) {
-	case "res":
-		# PLATFORM-1740: disable task queue in Reston, it was calling SJC broker
-		$wgTaskBroker = false;
-		break;
-}
-
 // TODO: Clean up after CK editor as default test is finished
 if (isset( $wgCityId ) && is_numeric($wgCityId) ) {
 	if ( in_array( intval( $wgCityId ), $wgCKEdefaultEditorTestWikis ) ) {
@@ -104,6 +94,13 @@ if ( ! empty( $wgEnableWikisApi ) ) {
 	F::app()->registerApiController( 'WikisApiController', "{$IP}/includes/wikia/api/WikisApiController.class.php" );
 }
 
+// During migration drop parser expiry on non-English wikis to 24 hours (PLATFORM-3765)
+if ( ( !wfHttpsAllowedForURL( $wgServer ) && !empty( $wgFandomComMigrationScheduled ) ) ||
+	( wfHttpsEnabledForURL( $wgServer ) && $wgLanguageCode !== 'en' )
+) {
+	$wgParserCacheExpireTime = 24 * 3600;
+}
+
 /*
  * Code for http://lyrics.wikia.com/
  */
@@ -160,6 +157,13 @@ if (empty($wgHelpWikiId)) {
 
 $wgLocalMessageCache = '/tmp/messagecache';
 
+/**
+ * List of readonly variables in WF (those can be changed
+ * only by internal request via API)
+ */
+$wgWikiFactoryReadonlyBlacklist = [
+	938, // AdTag is readonly
+];
 
 /**
  * The URL path of the icon for iPhone and iPod Touch web app bookmarks.
@@ -179,8 +183,6 @@ if ( $wgSharedUploadDBname ) {
 		'directory'        => $wgSharedUploadDirectory,
 		'url'              => $wgSharedUploadPath,
 		'hashLevels'       => $wgHashedSharedUploadDirectory ? 2 : 0,
-		'thumbScriptUrl'   => $wgSharedThumbnailScriptPath,
-		'transformVia404'  => !$wgGenerateThumbnailOnParse,
 		'hasSharedCache'   => $wgCacheSharedUploads,
 		'descBaseUrl'      => $wgRepositoryBaseUrl,
 		'fetchDescription' => $wgFetchCommonsDescriptions,
@@ -216,11 +218,6 @@ if ( !empty( $wgEnableEditPageLayoutExt ) ) {
 /**
  * load extensions by using configuration variables
  */
-
-#--- 1. Special::ProtectSite
-if (!empty($wgWikiaEnableSpecialProtectSiteExt)) {
-	include("$IP/extensions/wikia/SpecialProtectSite/SpecialProtectSite.php");
-}
 
 #--- 5. EventCountdown
 if (!empty($wgWikiaEnableEventCountdownExt)) {
@@ -340,6 +337,8 @@ if (!empty( $wgEnableArticleMetaDescription )) {
 
 #--- 44. AdEngine
 include ( "$IP/extensions/wikia/AdEngine/AdEngine2.setup.php" );
+include ( "$IP/extensions/wikia/AdEngine3/AdEngine3.setup.php" );
+include ( "$IP/extensions/wikia/AdEngine3/AdHostMirrors.setup.php" );
 
 include ( "$IP/extensions/wikia/TrackingOptIn/TrackingOptIn.setup.php" );
 
@@ -365,7 +364,7 @@ if ( defined( 'REBUILD_LOCALISATION_CACHE_IN_PROGRESS' ) || !empty($wgEnableSema
 		foreach( $argv as $key => $value ) {
 			if( substr($value, 0 , 8 ) === "--server" ) {
 				if( $value === "--server" ) {
-					// next artument is server url
+					// next argument is server url
 					if( isset( $argv[ $key + 1 ] ) ) {
 						$server = $argv[ $key + 1 ];
 					}
@@ -419,7 +418,7 @@ if ( defined( 'REBUILD_LOCALISATION_CACHE_IN_PROGRESS' ) || !empty($wgEnableSema
 
 if ( !empty( $wgEnableScribuntoExt ) ) {
 	include "$IP/extensions/Scribunto/Scribunto.php";
-	
+
 	// SUS-5540: use the luasandbox extension as executor if it is available
 	if ( extension_loaded( 'luasandbox' ) ) {
 		$wgScribuntoDefaultEngine = 'luasandbox';
@@ -597,10 +596,6 @@ if (!empty($wgEnableLabeledSectionTransExt)) {
 	if (!empty($wgEnabledLabeledSectionTransVHeaders)) {
 		include("$IP/extensions/LabeledSectionTransclusion/lsth.php");
 	}
-}
-
-if (!empty($wgEnableMapLibExt)) {
-	include("$IP/extensions/3rdparty/MapLib/MapLib.php");
 }
 
 if (!empty($wgEnableVerbatimExt)) {
@@ -1024,11 +1019,6 @@ if (!empty( $wgEnablePaginatorExt )){
 	include( "$IP/extensions/wikia/Paginator/Paginator.setup.php" );
 }
 
-# Category Exhibition
-if (!empty($wgEnableCategoryExhibitionExt)) {
-		include("$IP/extensions/wikia/CategoryExhibition/CategoryExhibition_setup.php" );
-}
-
 /*
  * Send email from the app authenticated by a secret token
  */
@@ -1132,7 +1122,6 @@ if ( !empty( $wgEnableWikiFeatures ) ) {
 			'wgEnableAjaxPollExt',
 			'wgEnableBlogArticles',
 			'wgEnableArticleCommentsExt',
-			'wgEnableCategoryExhibitionExt',
 			'wgEnableWallExt',
 			'wgEnablePortableInfoboxEuropaTheme'
 		),
@@ -1212,8 +1201,6 @@ if ( !empty($wgCityId) && $wgCityId != 1252 /* starter.wikia.com */ && !$wgDevel
 		'directory'        => $starterDirectory,
 		'url'              => $starterPath,
 		'hashLevels'       => 2,
-		'thumbScriptUrl'   => '',
-		'transformVia404'  => true,
 		'hasSharedCache'   => true,
 		'descBaseUrl'      => $starterUrl,
 		'fetchDescription' => true,
@@ -1307,7 +1294,6 @@ if ( !empty( $wgEnableVisualEditorExt ) ) {
 		case WIKIA_ENV_PROD:
 		case WIKIA_ENV_PREVIEW:
 		case WIKIA_ENV_VERIFY:
-		case WIKIA_ENV_STABLE:
 		case WIKIA_ENV_SANDBOX:
 			$wgVisualEditorParsoidHTTPProxy = 'http://prod.icache.service.consul:80';
 			$wgVisualEditorParsoidURL = 'http://prod.parsoid-cache';
@@ -1343,46 +1329,46 @@ if ( !empty( $wgEnableFormatNumExt ) ) {
 if ( empty( $wgRightsUrl ) ) {
 	switch( $wgLanguageCode ) {
 		case 'de':
-			$wgRightsUrl  = "http://de.{$wgWikiaBaseDomain}/Lizenz";
+			$wgRightsUrl  = 'https://www.fandom.com/de/licensing-de';
 			break;
 		case 'es':
-			$wgRightsUrl  = "http://es.{$wgWikiaBaseDomain}/Licencia";
+			$wgRightsUrl  = 'https://www.fandom.com/es/licensing-es';
 			break;
 		case 'fi':
 			$wgRightsUrl  = "http://yhteiso.{$wgWikiaBaseDomain}/wiki/Suomen_Wikia:Lisenssointi";
 			break;
 		case 'fr':
-			$wgRightsUrl  = "http://fr.{$wgWikiaBaseDomain}/Licence";
+			$wgRightsUrl  = 'https://www.fandom.com/fr/licensing-fr';
 			break;
 		case 'it':
-			$wgRightsUrl  = "http://it.community.{$wgWikiaBaseDomain}/wiki/Wiki_della_Community:Licenza";
+			$wgRightsUrl  = 'https://www.fandom.com/it/licensing-it';
 			break;
 		case 'ja':
-			$wgRightsUrl  = "http://ja.{$wgWikiaBaseDomain}/ライセンス";
+			$wgRightsUrl  = 'https://www.fandom.com/ja/licensing-ja';
 			break;
 		case 'nl':
 			$wgRightsUrl  = "http://nl.community.{$wgWikiaBaseDomain}/wiki/Auteursrecht";
 			break;
 		case 'pl':
-			$wgRightsUrl  = "http://pl.{$wgWikiaBaseDomain}/Licencja";
+			$wgRightsUrl  = 'https://www.fandom.com/pl/licensing-pl';
 			break;
 		case 'pt':
-			$wgRightsUrl  = "http://pt-br.{$wgWikiaBaseDomain}/Licenciamento";
+			$wgRightsUrl  = 'https://www.fandom.com/pt-br/licensing-pt-br';
 			break;
 		case 'pt-br':
-			$wgRightsUrl  = "http://pt-br.{$wgWikiaBaseDomain}/Licenciamento";
+			$wgRightsUrl  = 'https://www.fandom.com/pt-br/licensing-pt-br';
 			break;
 		case 'ru':
-			$wgRightsUrl  = "http://ru.{$wgWikiaBaseDomain}/wiki/Лицензирование";
+			$wgRightsUrl  = 'https://www.fandom.com/ru/licensing-ru';
 			break;
 		case 'zh':
-			$wgRightsUrl  = "http://zh.wikia.com/wiki/内容授权方式";
+			$wgRightsUrl  = 'https://www.fandom.com/zh/licensing-zh';
 			break;
 		case 'zh-tw':
-			$wgRightsUrl  = "http://zh-tw.wikia.com/wiki/內容授權方式";
+			$wgRightsUrl  = 'https://www.fandom.com/zh-tw/licensing-zh-tw';
 			break;
 		default:
-			$wgRightsUrl  = "http://www.{$wgWikiaBaseDomain}/Licensing";
+			$wgRightsUrl  = 'https://www.fandom.com/licensing';
 			break;
 	}
 }
@@ -1410,11 +1396,16 @@ $wgFileBackends['swift-backend'] = array(
 	'url'           => "http://{$wgFSSwiftServer}/swift/v1",
 );
 
-// This extension is enabled globally and handles Sync between datacenters
-// It does work on devboxes if you need to enable for testing, but we are not running the sync script
-if ( empty( $wgDevelEnvironment ) ) {
-	include( "{$IP}/extensions/wikia/SwiftSync/SwiftSync.setup.php" );
-}
+$wgFileBackends['gcs-backend'] = [
+	'name' => 'gcs-backend',
+	'class' => 'GcsFileBackend',
+	'lockManager' => 'nullLockManager',
+	'wikiId'	=> '',
+	'gcsCredentials' => $wgGcsConfig['gcsCredentials'],
+	'gcsBucket' => $wgGcsConfig['gcsBucket'],
+	'gcsTemporaryBucket' => $wgGcsConfig['gcsTemporaryBucket'],
+	'gcsObjectNamePrefix' => 'mediawiki/',
+];
 
 if ( !empty( $wgEnableCoppaToolExt ) ) {
 	include( "{$IP}/extensions/wikia/CoppaTool/CoppaTool.setup.php" );
@@ -1707,9 +1698,7 @@ if ( !empty( $wgEnableCommunityPageExt ) || ( $wgLanguageCode == 'ja' && $wgCity
 	include "$IP/extensions/wikia/CommunityPage/CommunityPage.setup.php";
 }
 
-if (!empty($wgFandomCreatorCommunityId)) {
-	include "$IP/extensions/wikia/FandomCreator/FandomCreator.setup.php";
-}
+include "$IP/extensions/wikia/FandomCreator/FandomCreator.setup.php";
 
 /**
  * @name $wgEnableNewAuthModal
@@ -1717,10 +1706,6 @@ if (!empty($wgFandomCreatorCommunityId)) {
  */
 if ( !isset($wgEnableNewAuthModal) && in_array( $wgLanguageCode, [ 'es', 'ru' ] ) ) {
 	$wgEnableNewAuthModal = true;
-}
-
-if ( !empty( $wgEnableFlowTracking ) ) {
-	include "$IP/extensions/wikia/FlowTracking/FlowTracking.setup.php";
 }
 
 if ( !empty( $wgEnableArticleFeaturedVideo ) || !empty( $wgEnableArticleRelatedVideo ) ) {
@@ -1741,6 +1726,10 @@ if ( !empty( $wgEnablePlaybuzzTagExt ) ) {
 
 if ( !empty( $wgEnableTrackingSettingsManager ) ) {
 	include "$IP/extensions/wikia/TrackingOptIn/TrackingSettingsManager.setup.php";
+}
+
+if ( !empty( $wgEnableResetTrackingPreferencesPage ) ) {
+	include "$IP/extensions/wikia/TrackingOptIn/ResetTrackingPreferences.setup.php";
 }
 
 include "$IP/extensions/wikia/JWPlayerTag/JWPlayerTag.setup.php";
@@ -1766,6 +1755,49 @@ include "$IP/extensions/wikia/Announcements/Announcements.setup.php";
 // updateSpecialPages.php maintenance script run.
 include "$IP/extensions/wikia/UpdateSpecialPagesScheduler/UpdateSpecialPagesScheduler.setup.php";
 
+// PLATFORM-3558 |
+include "$IP/extensions/wikia/AutoLogin/AutoLogin.setup.php";
+
 if ( !empty( $wgEnableFeedsAndPostsExt ) ) {
 	include "$IP/extensions/wikia/FeedsAndPosts/FeedsAndPosts.setup.php";
+}
+
+include "$IP/extensions/wikia/FandomComMigration/FandomComMigration.setup.php";
+
+// SUS-5817
+if ( $wgEnableFastlyInsights ) {
+	include "$IP/extensions/wikia/FastlyInsights/FastlyInsights.setup.php";
+}
+
+include "$IP/extensions/wikia/LanguageWikisIndex/LanguageWikisIndex.setup.php";
+
+if ( $wgIncludeClosedWikiHandler ) {
+	include "$IP/extensions/wikia/WikiFactory/Loader/closedWikiHandler.php";
+}
+
+// SRE-116
+include "$IP/extensions/wikia/ProtectSiteII/ProtectSite.php";
+
+// This extension is enabled globally and handles Sync between datacenters
+// It does work on devboxes if you need to enable for testing, but we are not running the sync script
+if ( empty( $wgDevelEnvironment ) ) {
+	include "$IP/lib/Wikia/src/SwiftSync/SwiftSync.setup.php";
+}
+
+// SEO-670 | SEO friendly category pages
+if ( !empty( $wgEnableCategoryPage3Ext ) ) {
+	include "$IP/extensions/wikia/CategoryPage3/CategoryPage3.setup.php";
+}
+
+// Category Exhibition
+// If you want to delete this extension remember to update CategoryPage3
+include("$IP/extensions/wikia/CategoryExhibition/CategoryExhibition_setup.php" );
+
+if ( !empty( $wgWatchShowURL ) ) {
+	include "$IP/extensions/wikia/WatchShow/WatchShow.setup.php";
+}
+
+// SUS-79
+if ( !empty( $wgEnableEditDraftSavingExt ) ) {
+	include "$IP/extensions/wikia/EditDraftSaving/EditDraftSaving.setup.php";
 }

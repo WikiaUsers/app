@@ -8,12 +8,20 @@ class WikiFactoryLoaderIntegrationTest extends WikiaDatabaseTest {
 	/** @var string $dbName */
 	private $dbName;
 
+	/** @var Language $oldContentLanguage */
+	private $oldContentLanguage;
+
 	protected function setUp() {
 		parent::setUp();
+		global $wgExtensionFunctions, $wgDBname, $wgContLang;
 
 		WikiFactory::isUsed( false );
-		$GLOBALS['wgExtensionFunctions'] = [];
-		$this->dbName = $GLOBALS['wgDBname'];
+		$wgExtensionFunctions = [];
+		$this->dbName = $wgDBname;
+		
+		// WikiFactoryLoader has side effects that initialize the global content language with a StubObject
+		// In tests, we must ensure that any previous value for this global is correctly restored
+		$this->oldContentLanguage = $wgContLang;
 	}
 
 	/**
@@ -78,6 +86,10 @@ class WikiFactoryLoaderIntegrationTest extends WikiaDatabaseTest {
 			'REQUEST_SCHEME' => 'http',
 			'SERVER_NAME' => 'test1.wikia.com',
 			'REQUEST_URI' => 'http://test1.wikia.com/de/wiki/Bar',
+		] ];
+		yield [ 9, [
+			'HTTP_X_MW_WIKI_ID' => '9',  // this header takes precedence
+			'SERVER_NAME' => 'test1.wikia.com',
 		] ];
 	}
 
@@ -236,11 +248,13 @@ class WikiFactoryLoaderIntegrationTest extends WikiaDatabaseTest {
 	 * @param array $server
 	 */
 	public function testRegistersClosedWikiHandlerWhenWikiIsDisabled( int $expectedCityId, array $server ) {
+		$this->mockGlobalVariable( 'wgCommandLineMode', false );
+
 		$wikiFactoryLoader = new WikiFactoryLoader( $server, [] );
 		$result = $wikiFactoryLoader->execute();
 
 		$this->assertEquals( $expectedCityId, $result );
-		$this->assertInstanceOf( Closure::class, $GLOBALS['wgExtensionFunctions'][0] );
+		$this->assertEquals( true, $GLOBALS['wgIncludeClosedWikiHandler'] );
 	}
 
 	public function provideDisabledWikis() {
@@ -375,10 +389,12 @@ class WikiFactoryLoaderIntegrationTest extends WikiaDatabaseTest {
 
 	protected function tearDown() {
 		parent::tearDown();
+		global $wgDBname, $wgContLang;
 
 		WikiFactory::isUsed( true );
 		LBFactory::destroyInstance();
-		$GLOBALS['wgDBname'] = $this->dbName;
+		$wgDBname = $this->dbName;
+		$wgContLang = $this->oldContentLanguage;
 	}
 
 	protected function getDataSet() {

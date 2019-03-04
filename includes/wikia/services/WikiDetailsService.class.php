@@ -163,9 +163,20 @@ class WikiDetailsService extends WikiService {
 		$wikiObj = WikiFactory::getWikiByID( $id );
 		if ( $wikiObj ) {
 			$exists = true;
+
+			// convert city_url to https url for https-enabled wikis
+			$city_url = WikiFactory::getLocalEnvURL( $wikiObj->city_url );
+			$enableHTTPSForAnons = WikiFactory::getVarValueByName( 'wgEnableHTTPSForAnons', $id );
+			if (
+				wfHttpsAllowedForURL( $city_url ) &&
+				( wfHttpsEnabledForURL( $city_url ) || !empty( $enableHTTPSForAnons ) )
+			) {
+				$city_url = wfHttpToHttps( $city_url );
+			}
+
 			return [
 				'title' => $wikiObj->city_title,
-				'url' => WikiFactory::getLocalEnvURL( $wikiObj->city_url ),
+				'url' => $city_url,
 			];
 		}
 		return [];
@@ -175,7 +186,7 @@ class WikiDetailsService extends WikiService {
 	 * @param int $id WikiId
 	 * @return array
 	 */
-	protected function getFromService( $id ) {
+	protected function getFromService( int $id ) {
 		$wikiStats = $this->getSiteStats( $id );
 		$topUsers = $this->getTopEditors( $id, static::DEFAULT_TOP_EDITORS_NUMBER );
 		$modelData = $this->getDetails( [ $id ] );
@@ -221,7 +232,7 @@ class WikiDetailsService extends WikiService {
 		 * We need to get value from WikiFactory to make sure the value is correct
 		 */
 		if ( WikiFactory::getVarValueByName( 'wgEnableDiscussions', $id ) ) {
-			$wikiDetails['stats']['discussions'] = (int)$this->getDiscussionStats( $id );
+			$wikiDetails['stats']['discussions'] = $this->getDiscussionStats( $id );
 		}
 
 		return $wikiDetails;
@@ -279,19 +290,34 @@ class WikiDetailsService extends WikiService {
 	}
 
 	/**
+	 * Gets the count of threads for the given community's discussions, or returns null if discussions in not active
+	 * on that community
+	 *
 	 * @param int $id
 	 * @return mixed
 	 */
 	private function getDiscussionStats( $id ) {
 		$discussionsServiceUrl = ServiceFactory::instance()->providerFactory()->urlProvider()->getUrl( 'discussion' );
-		$response = Http::get( "http://$discussionsServiceUrl/$id/forums/$id?limit=1", 'default', [ 'noProxy' => true ] );
-		if ( $response !== false ) {
-			$decodedResponse = json_decode( $response, true );
-			if ( isset( $decodedResponse['threadCount'] ) && json_last_error() === JSON_ERROR_NONE ) {
-				return $decodedResponse['threadCount'];
+		$response = Http::get( "http://$discussionsServiceUrl/$id/forums", 'default', [ 'noProxy' => true ] );
+		$nullToIndicateDiscussionsNotActive = null;
+
+		if ($response === false) {
+			return $nullToIndicateDiscussionsNotActive;
+		}
+
+		$decodedResponse = json_decode( $response, true );
+		if ( json_last_error() !== JSON_ERROR_NONE || !isset( $decodedResponse['_embedded']['doc:forum'] ) ) {
+			return $nullToIndicateDiscussionsNotActive;
+		}
+
+		$threadCount = 0;
+		foreach ( $decodedResponse['_embedded']['doc:forum'] as $forum ) {
+			if ( isset( $forum['threadCount'] ) ) {
+				$threadCount += $forum['threadCount'];
 			}
 		}
-		return null;
+
+		return $threadCount;
 	}
 
 	/**

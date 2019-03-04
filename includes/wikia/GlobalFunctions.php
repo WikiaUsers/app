@@ -1502,15 +1502,28 @@ function wfHttpsToHttp( $url ) {
 	return preg_replace( '/^https:\/\//', 'http://', $url );
 }
 
+function wfGetStagingEnvForUrl( $url ) : string {
+	$host = parse_url( $url, PHP_URL_HOST );
+	if ( $host === false ) {
+		return false;
+	}
+	$pattern = '/\\.(stable|preview|verify|sandbox-[a-z0-9]+)\\.(?:wikia|fandom)\\.com$/';
+	if ( preg_match( $pattern, $host, $matches ) ) {
+		return $matches[1];
+	}
+	return '';
+}
+
 function wfHttpsAllowedForURL( $url ): bool {
-	global $wgDevDomain, $wgWikiaEnvironment, $wgDevelEnvironment;
+	global $wgWikiaDevDomain, $wgFandomDevDomain, $wgWikiaEnvironment, $wgDevelEnvironment;
 	$host = parse_url( $url, PHP_URL_HOST );
 	if ( $host === false ) {
 		return false;
 	}
 
-	if ( $wgDevelEnvironment && !empty( $wgDevDomain ) ) {
-		$server = str_replace( ".{$wgDevDomain}", '', $host );
+	if ( $wgDevelEnvironment ) {
+		$server = str_replace( ".{$wgWikiaDevDomain}", '', $host );
+		$server = str_replace( ".{$wgFandomDevDomain}", '', $server );
 	} else {
 		$baseDomain = wfGetBaseDomainForHost( $host );
 
@@ -1521,6 +1534,12 @@ function wfHttpsAllowedForURL( $url ): bool {
 				$host
 			);
 		} else {
+			// this is called from WFL, where $wgRequest is not available yet; use $_SERVER vars to check the header
+			if ( isset( $_SERVER['HTTP_X_STAGING'] ) &&
+				in_array( $_SERVER['HTTP_X_STAGING'], [ 'externaltest', 'showcase' ] ) ) {
+				// As those envs are not covered by our certificate, disable https there
+				return false;
+			}
 			$server = str_replace( ".{$baseDomain}", '', $host );
 		}
 	}
@@ -1529,6 +1548,46 @@ function wfHttpsAllowedForURL( $url ): bool {
 	return substr_count( $server, '.' ) === 0;
 }
 
+/**
+ * Returns true for URLs with fandom domain, some examples:
+ * - https://starwars.fandom.com/wiki/Yoda
+ * - http://starwars.fandom.com/wiki/Yoda
+ * - http://starwars.fandom-dev.pl/
+ * - http://starwars.fandom-dev.us
+ *
+ * In the future, it can be used to force HTTPS on other domains
+ *
+ * @param $url
+ * @return bool
+ */
+function wfHttpsEnabledForURL( $url ): bool {
+	$host = parse_url( $url, PHP_URL_HOST );
+
+	// e.g. not existing wikis
+	if ( empty( $host ) ) {
+		return false;
+	}
+	return wfHttpsEnabledForDomain( $host );
+}
+
+/**
+ * Returns true for dhosts with fandom domain, some examples:
+ * - starwars.fandom.com
+ * - starwars.fandom.com
+ * - starwars.fandom-dev.pl
+ * - starwars.fandom-dev.us
+ *
+ * In the future, it can be used to force HTTPS on other domains
+ *
+ * @param $url
+ * @return bool
+ */
+function wfHttpsEnabledForDomain( $domain ) : bool {
+	global $wgFandomBaseDomain;
+	$domain = wfNormalizeHost( $domain );
+
+	return wfGetBaseDomainForHost( $domain ) === $wgFandomBaseDomain;
+}
 /**
  * Removes the protocol part of a url and returns the result, e. g. http://muppet.wikia.com -> muppet.wikia.com
  *
@@ -1556,4 +1615,84 @@ function wfGetBaseDomainForHost( $host ) {
 	}
 
 	return $wgWikiaBaseDomain;
+}
+
+/**
+ * "Unlocalizes" the host replaces env-specific domains with "wikia.com", for example
+ * 'muppet.preview.wikia.com' -> 'muppet.wikia.com'
+ *
+ * @param string $host
+ * @return string normalized host name
+ */
+function wfNormalizeHost( $host ) {
+	global $wgDevelEnvironment, $wgWikiaBaseDomain, $wgFandomBaseDomain, $wgWikiaDevDomain, $wgFandomDevDomain;
+	$baseDomain = wfGetBaseDomainForHost( $host );
+
+	// strip env-specific pre- and suffixes for staging environment
+	$host = preg_replace(
+		'/\.(stable|preview|verify|sandbox-[a-z0-9]+)\.' . preg_quote( $baseDomain ) . '/',
+		".{$baseDomain}",
+		$host );
+	if ( !empty( $wgDevelEnvironment ) ) {
+		$host = str_replace( ".{$wgWikiaDevDomain}", ".{$wgWikiaBaseDomain}", $host );
+		$host = str_replace( ".{$wgFandomDevDomain}", ".{$wgFandomBaseDomain}", $host );
+	}
+	return $host;
+}
+
+/**
+ * @param $url string full string to be modified
+ * @param $targetServer string host which will be used as na replacement (i.e. $wgServer)
+ * @return string modified string if successful or original url in case of some failure
+ * @throws Exception
+ */
+function wfForceBaseDomain( $url, $targetServer ) {
+	global $wgFandomBaseDomain, $wgWikiaBaseDomain;
+
+	$urlHost = parse_url( $url, PHP_URL_HOST );
+	$targetHost = parse_url( $targetServer, PHP_URL_HOST );
+
+	if ( $urlHost === false || $targetHost === false ) {
+		return $url;
+	}
+
+	$normalizedUrlHost = wfNormalizeHost( $urlHost );
+	$urlBaseDomain = wfGetBaseDomainForHost( $normalizedUrlHost );
+	$targetBaseDomain = wfGetBaseDomainForHost( wfNormalizeHost( $targetHost ) );
+	if ( $urlBaseDomain === $targetBaseDomain ) {
+		return $url;
+	}
+
+	$count = 0;
+	if ( $targetBaseDomain === $wgFandomBaseDomain ) {
+		$finalHost = str_replace(".{$wgWikiaBaseDomain}", ".{$targetBaseDomain}", $normalizedUrlHost, $count );
+	} else {
+		$finalHost = str_replace(".{$wgFandomBaseDomain}", ".{$targetBaseDomain}", $normalizedUrlHost, $count);
+	}
+
+	if ( $count !== 1 ) {
+		return $url;
+	}
+
+	$finalUrl = http_build_url( $url, [ 'host' => $finalHost, ] );
+	return WikiFactory::getLocalEnvURL( $finalUrl );
+}
+
+function wfGetLanguagePathFromURL( string $url ): string {
+	$path = parse_url( $url, PHP_URL_PATH );
+	if ( is_null( $path ) ) {
+		return '';
+	}
+
+	$slash = strpos( $path, '/', 1 ) ?: strlen( $path );
+	if ( $slash ) {
+		$languages = Language::getLanguageNames();
+		$langCode = substr( $path, 1, $slash - 1 );
+
+		if ( isset( $languages[$langCode] ) ) {
+			return "/{$langCode}";
+		}
+	}
+
+	return '';
 }

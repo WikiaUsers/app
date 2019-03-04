@@ -83,14 +83,6 @@ class MediaWiki {
 			$ret = Title::newFromID( $curid );
 		} elseif ( $title == '' && $action != 'delete' ) {
 			$ret = Title::newMainPage();
-
-			/* Wikia change begin - @author: Macbre */
-			/* Add hook to allow modification of page user is redirected to when title is not specified in URL */
-			if(!$request->getInt( 'diff' ) && !$request->getInt( 'oldid' )) {
-				Hooks::run( 'InitialQueriesMainPage', array( &$ret ) );
-			}
-			/* Wikia change end */
-
 		} else {
 			$ret = Title::newFromURL( $title );
 			// Alias NS_MEDIA page URLs to NS_FILE...we only use NS_MEDIA
@@ -117,12 +109,6 @@ class MediaWiki {
 				$ret = $rev ? $rev->getTitle() : $ret;
 			}
 		}
-
-		/* Wikia change begin - @author: nAndy */
-		/* Add hook to allow modification of page user is redirected to when title is not specified in URL */
-		/* It can be used for redirects but it changes url in end user's browser so it might not be what you want it to be */
-		Hooks::run( 'AfterCheckInitialQueries', array( &$title, &$action, &$ret ) );
-		/* Wikia change end */
 
 		if ( $ret === null || ( $ret->getDBkey() == '' && $ret->getInterwiki() == '' ) ) {
 			$ret = SpecialPage::getTitleFor( 'Badtitle' );
@@ -154,7 +140,7 @@ class MediaWiki {
 	 * @return void
 	 */
 	private function performRequest() {
-		global $wgServer, $wgUsePathInfo, $wgTitle;
+		global $wgServer, $wgScriptPath, $wgUsePathInfo, $wgTitle;
 
 		wfProfileIn( __METHOD__ );
 
@@ -234,7 +220,12 @@ class MediaWiki {
 				$url = $title->getFullURL( $query );
 			}
 			// Check for a redirect loop
-			if ( !preg_match( '/^' . preg_quote( $wgServer, '/' ) . '/', $url )
+			$urlScriptPath = wfGetLanguagePathFromURL( $url );
+			if (
+				(
+					!preg_match( '/^' . preg_quote( $wgServer, '/' ) . '/', $url )
+					|| ( $wgScriptPath !== $urlScriptPath )
+				)
 				&& $title->isLocal() )
 			{
 				// 301 so google et al report the target as the actual url.
@@ -248,7 +239,7 @@ class MediaWiki {
 		} elseif ( (
 			$shouldRedirectToTitle ||
 			$output->isRedirect() )
-			&& Hooks::run( 'TestCanonicalRedirect', array( $request, $title, $output ) ) )
+			&& Hooks::run( 'TestCanonicalRedirect', array( $request, &$title, $output ) ) )
 		{
 			if ( $shouldRedirectToTitle ) {
 
@@ -423,31 +414,35 @@ class MediaWiki {
 	/**
 	 * Cleaning up request by doing deferred updates, DB transaction, and the output
 	 */
-	public function finalCleanup() {
-		wfProfileIn( __METHOD__ );
+	private function finalCleanup() {
+		// Either all DBs should commit or none
+		ignore_user_abort( true );
+
 		// Now commit any transactions, so that unreported errors after
 		// output() don't roll back the whole DB transaction
+		// Also have ChronologyProtector take care of recording master positions
 		$factory = wfGetLBFactory();
-		$factory->commitMasterChanges();
+		$factory->shutdown();
 		// Output everything!
 		$this->context->getOutput()->output();
-		// Do any deferred jobs
-		DeferredUpdates::doUpdates( 'commit' );
-		wfProfileOut( __METHOD__ );
 	}
 
 	/**
-	 * Ends this task peacefully
+	 * Perform post-request updates such as deferred updates, profiling etc.
+	 * If possible this method will be executed only after the response has been flushed.
 	 */
 	public function restInPeace() {
+		// Do any deferred jobs
+		DeferredUpdates::doUpdates();
+
 		Hooks::run( 'RestInPeace' ); // Wikia change - @author macbre
 
 		MessageCache::logMessages();
 		wfLogProfilingData();
+
 		// Commit and close up!
 		$factory = wfGetLBFactory();
 		$factory->commitMasterChanges();
-		$factory->shutdown();
 		wfDebug( "Request ended normally\n" );
 	}
 

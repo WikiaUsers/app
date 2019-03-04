@@ -45,7 +45,7 @@ $wgHooks['LocalFileExecuteUrls']     []  = 'Wikia::onLocalFileExecuteUrls';
 # send ETag response header - BAC-1227
 $wgHooks['ParserCacheGetETag']       [] = 'Wikia::onParserCacheGetETag';
 
-# Add X-Served-By and X-Backend-Response-Time response headers - BAC-550
+# Add X-Backend-Response-Time response headers - BAC-550
 $wgHooks['BeforeSendCacheControl']    [] = 'Wikia::onBeforeSendCacheControl';
 $wgHooks['ResourceLoaderAfterRespond'][] = 'Wikia::onResourceLoaderAfterRespond';
 $wgHooks['NirvanaAfterRespond']       [] = 'Wikia::onNirvanaAfterRespond';
@@ -55,9 +55,6 @@ $wgHooks['AjaxResponseSendHeadersAfter'][] = 'Wikia::onAjaxResponseSendHeadersAf
 # don't purge all variants of articles in Chinese - BAC-1278
 $wgHooks['TitleGetLangVariants'][] = 'Wikia::onTitleGetLangVariants';
 
-# don't purge all thumbs - PLATFORM-161
-$wgHooks['LocalFilePurgeThumbnailsUrls'][] = 'Wikia::onLocalFilePurgeThumbnailsUrls';
-
 $wgHooks['BeforePageDisplay'][] = 'Wikia::onBeforePageDisplay';
 $wgHooks['GetPreferences'][] = 'Wikia::onGetPreferences';
 $wgHooks['WikiaSkinTopScripts'][] = 'Wikia::onWikiaSkinTopScripts';
@@ -65,9 +62,15 @@ $wgHooks['WikiaSkinTopScripts'][] = 'Wikia::onWikiaSkinTopScripts';
 # handle internal requests - PLATFORM-1473
 $wgHooks['WebRequestInitialized'][] = 'Wikia::onWebRequestInitialized';
 $wgHooks['WebRequestInitialized'][] = 'Wikia::outputHTTPSHeaders';
+$wgHooks['WebRequestInitialized'][] = 'Wikia::outputXServedBySHeader';
 
 # Log user email changes
 $wgHooks['BeforeUserSetEmail'][] = 'Wikia::logEmailChanges';
+
+# ResourceLoader and api on empty/closed English wikis
+$wgHooks['ShowLanguageWikisIndex'][] = 'Wikia::onClosedOrEmptyWikiDomains';
+$wgHooks['ClosedWikiHandler'][] = 'Wikia::onClosedOrEmptyWikiDomains';
+
 
 use Wikia\Tracer\WikiaTracer;
 
@@ -348,15 +351,9 @@ class Wikia {
 	 * @deprecated use WikiaLogger instead
 	 */
 	static public function logBacktrace($method) {
-		$backtrace = trim(strip_tags(wfBacktrace()));
-		$message = str_replace("\n", '/', $backtrace);
-
-		// add URL when logging from AJAX requests
-		if (isset($_SERVER['REQUEST_METHOD']) && ($_SERVER['REQUEST_METHOD'] === 'GET') && ($_SERVER['SCRIPT_URL'] === '/wikia.php')) {
-			$message .= " URL: {$_SERVER['REQUEST_URI']}";
-		}
-
-		Wikia::log($method, false, $message, true /* $force */);
+		\Wikia\Logger\WikiaLogger::instance()->info( $method, [
+			'exception' => new Exception()
+		] );
 	}
 
 	/**
@@ -1201,15 +1198,28 @@ class Wikia {
 	 */
 	static public function outputHTTPSHeaders( WebRequest $request ) {
 		if ( WebRequest::detectProtocol() === 'https' ) {
-			$request->response()->header('Content-Security-Policy: upgrade-insecure-requests' );
+			// PLATFORM-3828 - disable upgrade-insecure-requests on wikis not migrated to fandom.com
+			if ( wfHttpsEnabledForURL( $request->getFullRequestURL() ) ) {
+				$request->response()->header('Content-Security-Policy: upgrade-insecure-requests' );
+			}
 
 			$urlProvider = new \Wikia\Service\Gateway\KubernetesExternalUrlProvider();
 			$request->response()->header("Content-Security-Policy-Report-Only: " .
 				"default-src https: 'self' data: blob:; " .
 				"script-src https: 'self' data: 'unsafe-inline' 'unsafe-eval' blob:; " .
-				"style-src https: 'self' 'unsafe-inline' blob:; report-uri " . $urlProvider->getUrl( 'csp-logger' ) . '/csp' );
+				"style-src https: 'self' 'unsafe-inline' blob:; report-uri " . $urlProvider->getUrl( 'csp-logger' ) . '/csp/app' );
 		}
 		return true;
+	}
+
+	/**
+	 * Output X-Served-By header early enough so that all of our custom
+	 * entry-points are handled
+	 *
+	 * @param WebRequest $request
+	 */
+	static public function outputXServedBySHeader( WebRequest $request ) {
+		$request->response()->header( sprintf( 'X-Served-By: %s', wfHostname() ) );
 	}
 
 	/**
@@ -1512,12 +1522,17 @@ class Wikia {
 	static function onAfterSetupLocalFileRepo(Array &$repo) {
 		// $wgUploadPath: http://images.wikia.com/poznan/pl/images
 		// $wgFSSwiftContainer: poznan/pl
-		global $wgFSSwiftContainer, $wgFSSwiftServer, $wgUploadPath;
+		global $wgFSSwiftContainer, $wgFSSwiftServer, $wgUploadPath, $wgUseGoogleCloudStorage;
 
 		$path = trim( parse_url( $wgUploadPath, PHP_URL_PATH ), '/' );
 		$wgFSSwiftContainer = substr( $path, 0, -7 );
 
-		$repo['backend'] = 'swift-backend';
+		if ( $wgUseGoogleCloudStorage ) {
+			$repo['backend'] = 'gcs-backend';
+		} else {
+			$repo['backend'] = 'swift-backend';
+		}
+
 		$repo['zones'] = array (
 			'public' => array( 'container' => $wgFSSwiftContainer, 'url' => 'http://' . $wgFSSwiftServer, 'directory' => 'images' ),
 			'temp'   => array( 'container' => $wgFSSwiftContainer, 'url' => 'http://' . $wgFSSwiftServer, 'directory' => 'images/temp' ),
@@ -1602,7 +1617,6 @@ class Wikia {
 		global $wgRequestTime;
 		$elapsed = microtime( true ) - $wgRequestTime;
 
-		$response->header( sprintf( 'X-Served-By: %s', wfHostname() ) );
 		$response->header( sprintf( 'X-Backend-Response-Time: %01.3f', $elapsed ) );
 
 		$response->header( sprintf( 'X-Trace-Id: %s', WikiaTracer::instance()->getTraceId() ) );
@@ -1615,12 +1629,11 @@ class Wikia {
 	}
 
 	/**
-	 * Add X-Served-By and X-Backend-Response-Time response headers to MediaWiki pages
+	 * Add X-Backend-Response-Time response headers to MediaWiki pages
 	 *
 	 * See BAC-550 for details
 	 *
 	 * @param OutputPage $out
-	 * @param Skin $sk
 	 * @return bool
 	 * @author macbre
 	 */
@@ -1630,7 +1643,7 @@ class Wikia {
 	}
 
 	/**
-	 * Add X-Served-By and X-Backend-Response-Time response headers to ResourceLoader
+	 * Add X-Backend-Response-Time response headers to ResourceLoader
 	 *
 	 * See BAC-1319 for details
 	 *
@@ -1645,7 +1658,7 @@ class Wikia {
 	}
 
 	/**
-	 * Add X-Served-By and X-Backend-Response-Time response headers to wikia.php
+	 * Add X-Backend-Response-Time response headers to wikia.php
 	 *
 	 * @param WikiaApp $app
 	 * @param WikiaResponse $response
@@ -1658,7 +1671,7 @@ class Wikia {
 	}
 
 	/**
-	 * Add X-Served-By and X-Backend-Response-Time response headers to api.php
+	 * Add X-Backend-Response-Time response headers to api.php
 	 *
 	 * @param WebResponse $response
 	 * @return bool
@@ -1670,7 +1683,7 @@ class Wikia {
 	}
 
 	/**
-	 * Add X-Served-By and X-Backend-Response-Time response headers to index.php?action=ajax (MW ajax requests dispatcher)
+	 * Add X-Backend-Response-Time response headers to index.php?action=ajax (MW ajax requests dispatcher)
 	 *
 	 * @return bool
 	 * @author macbre
@@ -1697,24 +1710,6 @@ class Wikia {
 				$variants = ['zh-hans', 'zh-hant'];
 				break;
 		}
-
-		return true;
-	}
-
-	/**
-	 * No neeed to purge all thumbnails
-	 *
-	 * @author macbre
-	 * @see PLATFORM-161
-	 * @see PLATFORM-252
-	 *
-	 * @param LocalFile $file
-	 * @param array $urls thumbs to purge
-	 * @return bool
-	 */
-	static function onLocalFilePurgeThumbnailsUrls( LocalFile $file, Array &$urls ) {
-		// purge only the first thumbnail
-		$urls = array_slice($urls, 0, 1);
 
 		return true;
 	}
@@ -1922,7 +1917,6 @@ class Wikia {
 		}
 		$surrogateKey = implode( ' ', $surrogateKeys );
 		header( 'Surrogate-Key: ' . $surrogateKey );
-		header( 'X-Surrogate-Key: ' . $surrogateKey );
 	}
 
 	public static function surrogateKey( $args ) {
@@ -1935,8 +1929,8 @@ class Wikia {
 		return 'mw-' . implode( '-', func_get_args() );
 	}
 
-	public static function purgeSurrogateKey( $key ) {
-		CeleryPurge::purgeBySurrogateKey( $key );
+	public static function purgeSurrogateKey( string $key, string $service = 'mediawiki' ) {
+		\Wikia\Factory\ServiceFactory::instance()->purgerFactory()->purger()->addSurrogateKey( $key, $service );
 	}
 
 	public static function isProductionEnv(): bool {
@@ -1947,5 +1941,12 @@ class Wikia {
 	public static function isDevEnv(): bool {
 		global $wgWikiaEnvironment;
 		return $wgWikiaEnvironment === WIKIA_ENV_DEV;
+	}
+
+	public static function onClosedOrEmptyWikiDomains( $requestUrl ) {
+		if ( $_SERVER['SCRIPT_NAME'] == '/load.php' ) {
+			return false;
+		}
+		return true;
 	}
 }

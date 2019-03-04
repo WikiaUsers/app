@@ -34,6 +34,7 @@
 <? endif ?>
 
 <?= $topScripts ?>
+<?= $trackingCookies ?>
 <?= $globalBlockingScripts; /*needed for jsLoader and for the async loading of CSS files.*/ ?>
 
 <!-- Make IE recognize HTML5 tags. -->
@@ -58,7 +59,6 @@
 
 </head>
 <body class="<?= implode(' ', $bodyClasses) ?>" <?= $itemType ?>>
-<?= $il ?>
 <? if ( BodyController::isResponsiveLayoutEnabled() || BodyController::isOasisBreakpoints() ): ?>
 	<div class="background-image-gradient"></div>
 <? endif ?>
@@ -69,8 +69,9 @@
 
 <?= $comScore ?>
 <?= $quantServe ?>
-<?= $a9 ?>
-<?= $prebid ?>
+<?= $billTheLizard ?>
+<?= $moatYi ?>
+<?= $nielsen ?>
 <?= $krux ?>
 <?= $netzathleten ?>
 <?= $dynamicYield ?>
@@ -80,7 +81,6 @@
 
 	<?php
 		echo F::app()->renderView('Ad', 'Index', ['slotName' => 'GPT_FLUSH', 'pageTypes' => ['*']]);
-		echo F::app()->renderView('Ad', 'Index', ['slotName' => 'TURTLE_FLUSH', 'pageTypes' => ['*']]);
 	?>
 </div>
 <? if( $jsAtBottom ): ?>
@@ -95,7 +95,9 @@
 	<!-- Combined JS files and head scripts -->
 	<?= $jsFiles ?>
 <? endif ?>
-
+<? if ( $isUserLoggedIn && $cookieSyncEnabled ): ?>
+	<?= F::app()->renderView( 'AutoLoginService', 'Index' ) ?>
+<? endif ?>
 <script type="text/javascript">/*<![CDATA[*/ Wikia.LazyQueue.makeQueue(wgAfterContentAndJS, function(fn) {fn();}); wgAfterContentAndJS.start(); /*]]>*/</script>
 <script type="text/javascript">/*<![CDATA[*/ if (typeof AdEngine_trackPageInteractive === 'function') {wgAfterContentAndJS.push(AdEngine_trackPageInteractive);} /*]]>*/</script>
 <?= $bottomScripts ?>

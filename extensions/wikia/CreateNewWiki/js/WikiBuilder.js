@@ -1,6 +1,9 @@
 /*global WikiBuilderCfg, ThemeDesigner */
 
-define('ext.createNewWiki.builder', ['ext.createNewWiki.helper', 'wikia.tracker'], function (helper, tracker) {
+define(
+		'ext.createNewWiki.builder',
+		['ext.createNewWiki.helper', 'ext.createNewWiki.communityBuilderOptIn', 'wikia.tracker'],
+		function (helper, communityBuilderOptIn, tracker) {
 	'use strict';
 
 	var wntimer = false,
@@ -47,10 +50,7 @@ define('ext.createNewWiki.builder', ['ext.createNewWiki.helper', 'wikia.tracker'
 			category: 'create-new-wiki',
 			trackingMethod: 'analytics'
 		}),
-		wikiaBaseDomain = window.wgWikiaBaseDomain,
 		fandomBaseDomain = window.wgFandomBaseDomain,
-		shouldCreateLanguageWikisWithPath = window.wgCreateLanguageWikisWithPath,
-		shouldCreateEnglishWikisOnFandomCom = window.wgCreateEnglishWikisOnFandomCom,
 		NO_SUBDOMAIN_LANGUAGE = 'en';
 
 	function init() {
@@ -60,6 +60,7 @@ define('ext.createNewWiki.builder', ['ext.createNewWiki.helper', 'wikia.tracker'
 		checkNextButtonStep1();
 		bindEventHandlers();
 		initFloatingLabelsPosition();
+		communityBuilderOptIn.init(wb, wikiLanguage, wikiVertical, wikiName, wikiDomain);
 
 		// Set current step on page load
 		if (WikiBuilderCfg.currentstep) {
@@ -316,27 +317,14 @@ define('ext.createNewWiki.builder', ['ext.createNewWiki.helper', 'wikia.tracker'
 		checkWikiName();
 		checkDomain();
 		var selected = $(this).val();
-		if (shouldCreateEnglishWikisOnFandomCom) {
-			if (selected && selected !== NO_SUBDOMAIN_LANGUAGE) {
-				wikiBaseDomain.text(wikiaBaseDomain);
-			} else {
-				wikiBaseDomain.text(fandomBaseDomain);
-			}
-		}
-		if (shouldCreateLanguageWikisWithPath) {
-			if (selected && selected !== NO_SUBDOMAIN_LANGUAGE) {
-				wikiBaseDomain.text(wikiaBaseDomain + '/' + selected);
-			}
+		if (selected && selected !== NO_SUBDOMAIN_LANGUAGE) {
+			wikiBaseDomain.text(fandomBaseDomain + '/' + selected);
 		} else {
-			if (selected && selected !== NO_SUBDOMAIN_LANGUAGE) {
-				wikiDomainCountry.html(selected + '.');
-			} else {
-				wikiDomainCountry.html('');
-			}
+			wikiBaseDomain.text(fandomBaseDomain);
+		}
 
-			if (!wikiDomainLabel.hasClass('active')) {
-				wikiDomainLabel.css('left', wikiDomain.position().left);
-			}
+		if (!wikiDomainLabel.hasClass('active')) {
+			wikiDomainLabel.css('left', wikiDomain.position().left);
 		}
 
 		track({

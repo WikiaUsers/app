@@ -1542,13 +1542,20 @@ class Title {
 	 * @return String the URL
 	 */
 	public function getLinkURL( $query = '', $query2 = false ) {
+		global $wgServer;
 		wfProfileIn( __METHOD__ );
 		if ( $this->isExternal() ) {
 			$ret = $this->getFullURL( $query, $query2 );
 		} elseif ( $this->getPrefixedText() === '' && $this->getFragment() !== '' ) {
 			$ret = $this->getFragmentForURL();
 		} else {
-			$ret = $this->getLocalURL( $query, $query2 ) . $this->getFragmentForURL();
+			// Wikia change begin -- always use full URLs for multiple subdomain wikis (PLATFORM-3765)
+			if ( !wfHttpsAllowedForURL( $wgServer ) ) {
+				$ret = $this->getFullURL( $query, $query2 );
+			} else {
+				$ret = $this->getLocalURL( $query, $query2 ) . $this->getFragmentForURL();
+			}
+			// Wikia change end
 		}
 		wfProfileOut( __METHOD__ );
 		return $ret;
@@ -2110,7 +2117,8 @@ class Title {
 			$errors[] = array( 'confirmedittext' );
 		}
 
-		if ( ( $action == 'edit' || $action == 'create' ) && !$user->isBlockedFrom( $this ) ) {
+		// SRE-109: Check user block from slave instead of reading from master
+		if ( ( $action == 'edit' || $action == 'create' ) && !$user->isBlockedFrom( $this, true /* use slave */ ) ) {
 			// Don't block the user from editing their own talk page unless they've been
 			// explicitly blocked from that too.
 		} elseif( $user->isBlocked() && $user->mBlock->prevents( $action ) !== false ) {
@@ -2637,7 +2645,7 @@ class Title {
 			// Wikia change SUS-5481: defer purging expired entries via background task
 			$task = \Wikia\Tasks\Tasks\PurgeExpiredRestrictionsTask::newLocalTask();
 			$task->call( 'purgeExpiredPageRestrictions', $expired );
-			$task->scheduleAsDeferredUpdate();
+			$task->queue();
 		}
 
 		if ( $getPages ) {
@@ -2789,7 +2797,7 @@ class Title {
 				// SUS-5481 - Wikia change deferred purge via background task
 				$task = \Wikia\Tasks\Tasks\PurgeExpiredRestrictionsTask::newLocalTask();
 				$task->call( 'purgeExpiredPageRestrictions', $expired );
-				$task->scheduleAsDeferredUpdate();
+				$task->queue();
 			}
 		}
 
@@ -2832,7 +2840,7 @@ class Title {
 						// Wikia change SUS-5481: defer the purge via background task
 						$task = \Wikia\Tasks\Tasks\PurgeExpiredRestrictionsTask::newLocalTask();
 						$task->call( 'purgeExpiredProtectedTitles', $this->getNamespace(), $this->getDBkey() );
-						$task->scheduleAsDeferredUpdate();
+						$task->queue();
 
 						$this->mTitleProtection = false;
 					}

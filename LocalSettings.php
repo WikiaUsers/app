@@ -138,9 +138,7 @@ $wgServer = WebRequest::detectServer();
  * redirect loops when "pretty URLs" are used.
  * @var bool $wgUsePathInfo
  */
-$wgUsePathInfo = ( strpos(php_sapi_name(), 'cgi') === false ) &&
-        ( strpos(php_sapi_name(), 'apache2filter') === false ) &&
-        ( strpos(php_sapi_name(), 'isapi') === false );
+$wgUsePathInfo = ( php_sapi_name() == 'apache2handler' ) || ( php_sapi_name() == 'fpm-fcgi' ); # Wikia change - SUS-5825
 
 /**
  * Show EXIF data, on by default if available. Requires PHP's EXIF extension.
@@ -260,6 +258,7 @@ $wgConf->localVHosts = array_merge(
     $wgWikiFactoryDomains,
     [
         $wgWikiaBaseDomain,
+        $wgFandomBaseDomain,
         'uncyclopedia.org',
         'memory-alpha.org',
         'wowwiki.com',
@@ -336,6 +335,9 @@ try {
     // we do not need the loader and the result in the global scope.
     unset( $oWiki, $result );
 } catch ( InvalidArgumentException $invalidArgumentException ) {
+	// SUS-5855 | the server could not understand the request due to invalid syntax, highly
+	// likely host is not set properly in a HTTP request
+	header( 'HTTP/1.1 400 Bad Request' );
 	echo $invalidArgumentException->getMessage() . PHP_EOL;
 	exit( 1 );
 }

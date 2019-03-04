@@ -5,10 +5,7 @@ require([
 	'ext.wikia.adEngine.adLogicPageParams',
 	'ext.wikia.adEngine.adTracker',
 	'ext.wikia.adEngine.context.slotsContext',
-	'ext.wikia.adEngine.geo',
 	'ext.wikia.adEngine.slot.service.stateMonitor',
-	'ext.wikia.adEngine.lookup.a9',
-	'ext.wikia.adEngine.lookup.prebid',
 	'ext.wikia.adEngine.customAdsLoader',
 	'ext.wikia.adEngine.messageListener',
 	'ext.wikia.adEngine.mobile.mercuryListener',
@@ -16,6 +13,7 @@ require([
 	'ext.wikia.adEngine.slot.service.actionHandler',
 	'ext.wikia.adEngine.slot.service.slotRegistry',
 	'ext.wikia.adEngine.tracking.adInfoListener',
+	'ext.wikia.adEngine.tracking.pageInfoTracker',
 	'ext.wikia.adEngine.utils.adLogicZoneParams',
 	'ext.wikia.adEngine.wad.babDetection',
 	'wikia.trackingOptIn',
@@ -27,10 +25,7 @@ require([
 	pageLevelParams,
 	adTracker,
 	slotsContext,
-	geo,
 	slotStateMonitor,
-	a9,
-	prebid,
 	customAdsLoader,
 	messageListener,
 	mercuryListener,
@@ -38,6 +33,7 @@ require([
 	actionHandler,
 	slotRegistry,
 	adInfoListener,
+	pageInfoTracker,
 	adLogicZoneParams,
 	babDetection,
 	trackingOptIn,
@@ -54,9 +50,7 @@ require([
 	adContext.addCallback(function () {
 		adEngineBridge.init(
 			adTracker,
-			geo,
 			slotRegistry,
-			mercuryListener,
 			pageLevelParams.getPageLevelParams(),
 			adLogicZoneParams,
 			adContext,
@@ -83,15 +77,16 @@ require([
 	}
 
 	function callOnConsecutivePageView() {
-		if (adContext.get('bidders.prebid')) {
-			prebid.call();
-		}
-
-		if (adContext.get('bidders.a9')) {
-			a9.call();
-		}
-
 		passFVLineItemIdToUAP();
+
+		adEngineBridge.readSessionId();
+
+		// Track Labrador values to DW
+		var labradorPropValue = adEngineBridge.geo.getSamplingResults().join(';');
+
+		if (context.opts.enableAdInfoLog && labradorPropValue) {
+			pageInfoTracker.trackProp('labrador', labradorPropValue);
+		}
 	}
 
 	mercuryListener.onLoad(function () {

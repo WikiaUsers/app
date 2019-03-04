@@ -1171,7 +1171,8 @@ class EditPage {
 			return $status;
 		}
 
-		if ( $wgUser->isBlockedFrom( $this->mTitle, false ) ) {
+		// SRE-109: Check blocked status on a replica instead of the master
+		if ( $wgUser->isBlockedFrom( $this->mTitle, true ) ) {
 			// Auto-block user's IP if the account was "hard" blocked
 			$wgUser->spreadAnyEditBlock();
 			# Check block state against master, thus 'false'.
@@ -1786,7 +1787,8 @@ class EditPage {
 			$previewOutput = $this->getPreviewText();
 		}
 
-		Hooks::run( 'EditPage::showEditForm:initial', [ $this ] );
+		// pass the OutputPage object (added in version MW 1.20.0)
+		Hooks::run( 'EditPage::showEditForm:initial', [ $this, $wgOut ] );
 
 		$this->setHeaders();
 
@@ -2270,9 +2272,6 @@ HTML
 		);
 		if ( !$this->checkUnicodeCompliantBrowser() )
 			$wgOut->addHTML(Html::hidden( 'safemode', '1' ));
-
-		$isSourceEditor = !( class_exists( "RTE" ) && RTE::isWysiwygModeEnabled() ) ?  1 : 0;
-		$wgOut->addHTML( Html::hidden( 'isMediaWikiEditor', $isSourceEditor ) );
 	}
 
 	protected function showFormAfterText() {

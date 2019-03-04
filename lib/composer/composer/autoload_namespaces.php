@@ -8,7 +8,9 @@ $baseDir = dirname(dirname($vendorDir));
 return array(
     'Symfony\\Component\\CssSelector\\' => array($vendorDir . '/symfony/css-selector'),
     'Solarium_' => array($baseDir . '/lib/vendor/Solarium'),
+    'Rize\\UriTemplate' => array($vendorDir . '/rize/uri-template/src'),
     'Prophecy\\' => array($vendorDir . '/phpspec/prophecy/src'),
+    'Prometheus\\' => array($vendorDir . '/wikia/prometheus_client_php/src'),
     'PEAR' => array($vendorDir . '/pear/pear_exception'),
     'Net' => array($vendorDir . '/pear/net_socket', $vendorDir . '/wikia/net_smtp2', $vendorDir . '/wikia/net_socket2'),
     'Mail' => array($vendorDir . '/pear/mail_mime'),

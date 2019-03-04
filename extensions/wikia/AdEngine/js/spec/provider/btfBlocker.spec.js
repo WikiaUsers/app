@@ -29,7 +29,12 @@ describe('ext.wikia.adEngine.provider.btfBlocker', function () {
 			}
 		},
 		win: {
-			addEventListener: noop
+			addEventListener: noop,
+			ads: {
+				runtime: {
+
+				}
+			}
 		}
 	};
 
@@ -42,7 +47,6 @@ describe('ext.wikia.adEngine.provider.btfBlocker', function () {
 	function getBtfBlocker() {
 		return modules['ext.wikia.adEngine.provider.btfBlocker'](
 			mocks.adContext,
-			mocks.bridge,
 			mocks.messageListener,
 			modules['wikia.lazyqueue'](),
 			mocks.log,
@@ -53,10 +57,11 @@ describe('ext.wikia.adEngine.provider.btfBlocker', function () {
 	function getFakeProvider() {
 		return {
 			config: {
-				atfSlots: [
+				firstCallSlots: [
 					'ATF_SLOT'
 				],
 				highlyViewableSlots: [
+					'TOP_BOXAD',
 					'HIVI_BTF_SLOT',
 					'INVISIBLE_HIGH_IMPACT_2'
 				]
@@ -76,7 +81,7 @@ describe('ext.wikia.adEngine.provider.btfBlocker', function () {
 			success: function () {
 				this.callback();
 			},
-			pre: function (result, callback) {
+			post: function (result, callback) {
 				this.callback = callback;
 			}
 		};
@@ -168,19 +173,53 @@ describe('ext.wikia.adEngine.provider.btfBlocker', function () {
 	});
 
 	it('Process HIVI BTF slot when BTF is disabled and unblocking HIVI slots is enabled', function () {
+
 		var fillInSlot,
 			btfBlocker = getBtfBlocker(),
 			btfSlot = getFakeSlot('BTF_SLOT'),
 			fakeProvider = getFakeProvider();
 
-		fillInSlot = btfBlocker.decorate(fakeProvider.fillInSlot, fakeProvider.config);
-		fillInSlot(getFakeSlot('ATF_SLOT'));
 		mocks.win.ads.runtime.disableBtf = true;
 		mocks.win.ads.runtime.unblockHighlyViewableSlots = true;
+
+		fillInSlot = btfBlocker.decorate(fakeProvider.fillInSlot, fakeProvider.config);
+		fillInSlot(getFakeSlot('ATF_SLOT'));
 		fillInSlot(getFakeSlot('HIVI_BTF_SLOT'));
 		fillInSlot(btfSlot);
 
 		expect(mocks.methodCalledInsideFillInSlot.calls.count()).toEqual(2);
 		expect(btfSlot.collapse).toHaveBeenCalled();
+	});
+
+	it('Process TOP_BOXAD slot when second call is not disabled', function () {
+
+		var fillInSlot,
+			btfBlocker = getBtfBlocker(),
+			topBoxadSlot = getFakeSlot('TOP_BOXAD'),
+			fakeProvider = getFakeProvider();
+
+		mocks.win.ads.runtime.disableSecondCall = false;
+
+		fillInSlot = btfBlocker.decorate(fakeProvider.fillInSlot, fakeProvider.config);
+		fillInSlot(getFakeSlot('ATF_SLOT'));
+		fillInSlot(topBoxadSlot);
+
+		expect(mocks.methodCalledInsideFillInSlot.calls.count()).toEqual(2);
+	});
+
+	it('Collapse TOP_BOXAD slot when second call is disabled', function () {
+
+		var fillInSlot,
+			btfBlocker = getBtfBlocker(),
+			topBoxadSlot = getFakeSlot('TOP_BOXAD'),
+			fakeProvider = getFakeProvider();
+
+		mocks.win.ads.runtime.disableSecondCall = true;
+
+		fillInSlot = btfBlocker.decorate(fakeProvider.fillInSlot, fakeProvider.config);
+		fillInSlot(getFakeSlot('ATF_SLOT'));
+		fillInSlot(topBoxadSlot);
+
+		expect(topBoxadSlot.collapse).toHaveBeenCalled();
 	});
 });

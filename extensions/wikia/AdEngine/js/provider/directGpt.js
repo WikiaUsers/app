@@ -3,27 +3,23 @@
 define('ext.wikia.adEngine.provider.directGpt', [
 	'ext.wikia.adEngine.adContext',
 	'ext.wikia.adEngine.provider.factory.wikiaGpt',
-	'ext.wikia.adEngine.slot.service.kiloAdUnitBuilder',
-	'ext.wikia.adEngine.slot.service.megaAdUnitBuilder',
 	'ext.wikia.adEngine.slotTweaker'
 ], function (
 	adContext,
 	factory,
-	kiloAdUnitBuilder,
-	megaAdUnitBuilder,
 	slotTweaker
 ) {
 	'use strict';
 
 	var context = adContext.getContext(),
 		sraEnabled = !context.opts.disableSra,
-		atfSlots = [
+		firstCallSlots = [
 			'TOP_LEADERBOARD',
 			'GPT_FLUSH'
 		];
 
 	if (sraEnabled) {
-		atfSlots.push('TOP_RIGHT_BOXAD', 'INVISIBLE_SKIN');
+		firstCallSlots.push('TOP_BOXAD', 'INVISIBLE_SKIN');
 	}
 
 	return factory.createProvider(
@@ -41,22 +37,27 @@ define('ext.wikia.adEngine.provider.directGpt', [
 				size: '3x3,728x90,1030x130,1030x65,1030x250,970x365,970x250,970x90,970x66,970x180,980x150,1024x416,1440x585',
 				loc: 'top'
 			},
-			TOP_RIGHT_BOXAD:            {size: '300x250,300x600,300x1050', loc: 'top'}
+			TOP_BOXAD:                  {
+				size: '300x250,300x600,300x1050',
+				loc: 'top',
+				pos: ['TOP_BOXAD', 'TOP_RIGHT_BOXAD']
+			}
 		},
 		{
 			afterSuccess: function (slotName) {
 				slotTweaker.removeDefaultHeight(slotName);
 			},
+			atfSlots: [
+				'TOP_LEADERBOARD',
+				'TOP_BOXAD'
+			],
 			sraEnabled: sraEnabled,
-			atfSlots: atfSlots,
-			getAdUnitBuilder: function () {
-				return context.opts.megaAdUnitBuilderEnabled ? megaAdUnitBuilder : kiloAdUnitBuilder;
-			},
+			firstCallSlots: firstCallSlots,
 			highlyViewableSlots: [
 				'INCONTENT_BOXAD_1',
 				'INCONTENT_PLAYER',
 				'INVISIBLE_HIGH_IMPACT_2',
-				'TOP_RIGHT_BOXAD'
+				'TOP_BOXAD'
 			],
 			testSrc: 'test'
 		}

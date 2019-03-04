@@ -9,7 +9,10 @@ define('ext.wikia.adEngine.slot.service.srcProvider', [
 	'use strict';
 
 	function addTestPrefixForTestWiki(originalSrc, extra) {
-		if (adContext.get('opts.isAdTestWiki')) {
+		if (adContext.get('opts.isAdTestWiki') && adContext.get('targeting.testSrc')) {
+			// TODO: ADEN-8318 leave one value only
+			originalSrc = [originalSrc, adContext.get('targeting.testSrc')];
+		} else if (adContext.get('opts.isAdTestWiki')) {
 			originalSrc = extra && extra.testSrc ? extra.testSrc : 'test-' + originalSrc;
 		}
 
@@ -19,10 +22,6 @@ define('ext.wikia.adEngine.slot.service.srcProvider', [
 	function get(originalSrc, extra) {
 		if (adContext.get('targeting.skin') === 'oasis' && babDetection.isBlocking()) {
 			return getRecSrc();
-		}
-
-		if (adContext.get('opts.premiumOnly') && !adContext.get('opts.isAdTestWiki')) {
-			return ['premium', originalSrc];
 		}
 
 		return addTestPrefixForTestWiki(originalSrc, extra);

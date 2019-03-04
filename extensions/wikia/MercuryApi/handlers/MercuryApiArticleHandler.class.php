@@ -23,7 +23,10 @@ class MercuryApiArticleHandler {
 	 *
 	 * @param Article $article
 	 *
-	 * @return mixed
+	 * @return array
+	 * @throws FatalError
+	 * @throws MWException
+	 * @throws WikiaException
 	 */
 	public static function getArticleDetails( Article $article ) {
 		$articleId = $article->getID();
@@ -32,6 +35,8 @@ class MercuryApiArticleHandler {
 
 		$articleDetails['abstract'] = htmlspecialchars( $articleDetails['abstract'] );
 		$articleDetails['description'] = htmlspecialchars( self::getArticleDescription( $article ) );
+
+		\Hooks::run( 'MercuryArticleDetails', [ $article, &$articleDetails ] );
 
 		return $articleDetails;
 	}
@@ -116,30 +121,24 @@ class MercuryApiArticleHandler {
 	 * @return mixed
 	 */
 	public static function getTopContributorsDetails( Array $ids ) {
-		// TODO: clean me after new mobile bottom of a page is released and icache expires
-		$premiumBottom = (bool) RequestContext::getMain()->getRequest()->getVal('premiumBottom', false);
-
 		if ( empty( $ids ) ) {
 			return [];
 		}
 
 		try {
-			if ($premiumBottom) {
-				return array_map(
-					function ( $userDetails ) {
-						if ( AvatarService::isEmptyOrFirstDefault( $userDetails['name'] ) ) {
-							$userDetails['avatar'] = null;
-						}
+			return array_map(
+				function ( $userDetails ) {
+					if ( AvatarService::isEmptyOrFirstDefault( $userDetails['name'] ) ) {
+						$userDetails['avatar'] = null;
+					}
 
-						return $userDetails;
-					},
-					F::app()
-						->sendRequest( 'UserApi', 'getDetails', [ 'ids' => implode( ',', $ids ), 'size' => AvatarService::AVATAR_SIZE_SMALL_PLUS ] )
-						->getData()['items']
-				);
-			} else {
-				return F::app()->sendRequest( 'UserApi', 'getDetails', [ 'ids' => implode( ',', $ids ) ] )->getData()['items'];
-			}
+					return $userDetails;
+				},
+				F::app()
+					->sendRequest( 'UserApi', 'getDetails', [ 'ids' => implode( ',', $ids ), 'size' => AvatarService::AVATAR_SIZE_SMALL_PLUS ] )
+					->getData()['items']
+			);
+
 		} catch ( NotFoundApiException $e ) {
 			// getDetails throws NotFoundApiException when no contributors are found
 			// and we want the article even if we don't have the contributors

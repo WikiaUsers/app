@@ -34,7 +34,7 @@ class DesignSystemGlobalFooterModel extends WikiaModel {
 				'image' => 'wds-company-logo-fandom-powered-by-wikia-two-lines',
 				'image-data' => [
 					'type' => 'wds-svg',
-					'name' => 'wds-company-logo-fandom-powered-by-wikia-two-lines',
+					'name' => 'wds-company-logo-fandom-white',
 				],
 				'href' => $this->getHref( 'fandom-logo' ),
 				'title' => [
@@ -325,7 +325,7 @@ class DesignSystemGlobalFooterModel extends WikiaModel {
 						'type' => 'translatable-text',
 						'key' => 'global-footer-fandom-overview-link-vertical-games'
 					],
-					'href' => '//fandom.wikia.com/games',
+					'href' => 'https://www.fandom.com/games',
 					'tracking_label' => 'fandom-overview.games',
 				],
 				[
@@ -335,7 +335,7 @@ class DesignSystemGlobalFooterModel extends WikiaModel {
 						'type' => 'translatable-text',
 						'key' => 'global-footer-fandom-overview-link-vertical-movies'
 					],
-					'href' => '//fandom.wikia.com/movies',
+					'href' => 'https://www.fandom.com/movies',
 					'tracking_label' => 'fandom-overview.movies',
 				],
 				[
@@ -345,7 +345,7 @@ class DesignSystemGlobalFooterModel extends WikiaModel {
 						'type' => 'translatable-text',
 						'key' => 'global-footer-fandom-overview-link-vertical-tv'
 					],
-					'href' => '//fandom.wikia.com/tv',
+					'href' => 'https://www.fandom.com/tv',
 					'tracking_label' => 'fandom-overview.tv',
 				],
 			];

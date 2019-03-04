@@ -1,13 +1,12 @@
 <?php
 
 class ArticleAsJson {
-	static $media = [ ];
 	static $heroImage = null;
 	static $mediaDetailConfig = [
 		'imageMaxWidth' => false
 	];
 
-	const CACHE_VERSION = 3.38;
+	const CACHE_VERSION = 3.40;
 
 	const ICON_MAX_SIZE = 48;
 	// Line height in Mercury
@@ -22,8 +21,6 @@ class ArticleAsJson {
 	const MEDIA_ICON_TEMPLATE = 'extensions/wikia/ArticleAsJson/templates/media-icon.mustache';
 	const MEDIA_THUMBNAIL_TEMPLATE = 'extensions/wikia/ArticleAsJson/templates/media-thumbnail.mustache';
 	const MEDIA_GALLERY_TEMPLATE = 'extensions/wikia/ArticleAsJson/templates/media-gallery.mustache';
-	const MEDIA_GALLERY_TEMPLATE_OLD = 'extensions/wikia/ArticleAsJson/templates/media-gallery-old.mustache';
-	const MEDIA_LINKED_GALLERY_TEMPLATE_OLD = 'extensions/wikia/ArticleAsJson/templates/media-linked-gallery-old.mustache';
 
 	private static function renderIcon( $media ) {
 		$scaledSize = self::scaleIconSize( $media['height'], $media['width'] );
@@ -60,7 +57,7 @@ class ArticleAsJson {
 				self::MEDIA_THUMBNAIL_TEMPLATE,
 				[
 					'media' => $media,
-					'mediaAttrs' => json_encode( $media ),
+					'mediaAttrs' => json_encode( self::getDataAttrsForImage( $media ) ),
 					'downloadIcon' => DesignSystemHelper::renderSvg( 'wds-icons-download', 'wds-icon' ),
 					'chevronIcon' => DesignSystemHelper::renderSvg('wds-icons-menu-control-tiny', 'wds-icon wds-icon-tiny chevron'),
 					'hasFigcaption' => !empty( $media['caption'] ) || ( !empty( $media['title'] ) && ( $media['isVideo'] || $media['isOgg'] ) )
@@ -69,49 +66,47 @@ class ArticleAsJson {
 		);
 	}
 
-	private static function renderGallery( $media, $hasLinkedImages ) {
-		// TODO: clean me when new galleries in mobile-wiki are released and cache expires
-		$isNewGalleryLayout = !empty( RequestContext::getMain()->getRequest()->getVal( 'premiumGalleries', false ) );
-		if ( $isNewGalleryLayout ) {
-			$rows = self::prepareGalleryRows($media);
+	private static function renderGallery( $media ) {
+		$rows = self::prepareGalleryRows( $media );
 
-			return self::removeNewLines(
-				\MustacheService::getInstance()->render(
-					self::MEDIA_GALLERY_TEMPLATE,
-					[
-						'galleryAttrs' => json_encode( $media ),
-						'rows' => $rows,
-						'downloadIcon' => DesignSystemHelper::renderSvg( 'wds-icons-download', 'wds-icon' ),
-						'viewMoreLabel' => count($media) > 20 ? wfMessage('communitypage-view-more')->escaped() : false, // TODO:  XW-4793
-					]
-				)
-			);
-		} elseif ( $hasLinkedImages ) {
-			return self::removeNewLines(
-				\MustacheService::getInstance()->render(
-					self::MEDIA_LINKED_GALLERY_TEMPLATE_OLD,
-					[
-						'galleryAttrs' => json_encode( $media ),
-						'media' => $media,
-						'downloadIcon' => DesignSystemHelper::renderSvg( 'wds-icons-download', 'wds-icon' ),
-						'viewMoreLabel' => wfMessage('communitypage-view-more')->escaped(), // TODO:  XW-4793
-						'linkedGalleryViewMoreVisible' => $hasLinkedImages && count($media) > 4,
-						'chevronIcon' => DesignSystemHelper::renderSvg('wds-icons-menu-control-tiny', 'wds-icon wds-icon-tiny chevron')
-					]
-				)
-			);
-		} else {
-			return self::removeNewLines(
-				\MustacheService::getInstance()->render(
-					self::MEDIA_GALLERY_TEMPLATE_OLD,
-					[
-						'galleryAttrs' => json_encode( $media ),
-						'media' => $media,
-						'downloadIcon' => DesignSystemHelper::renderSvg( 'wds-icons-download', 'wds-icon' ),
-					]
-				)
-			);
+		return self::removeNewLines(
+			\MustacheService::getInstance()->render(
+				self::MEDIA_GALLERY_TEMPLATE,
+				[
+					'galleryAttrs' => json_encode( self::getDataAttrsForGallery( $media ) ),
+					'rows' => $rows,
+					'downloadIcon' => DesignSystemHelper::renderSvg( 'wds-icons-download', 'wds-icon' ),
+					'viewMoreLabel' => count($media) > 20 ? wfMessage('communitypage-view-more')->escaped() : false, // TODO:  XW-4793
+				]
+			)
+		);
+	}
+
+	public static function getDataAttrsForImage( $media ) {
+		$dataAttrs = [
+			'type' => $media['type'],
+			'url' => $media['url'],
+			'title' => $media['title'],
+			'isLinkedByUser' => $media['isLinkedByUser'],
+			'href' => $media['href'],
+			'isVideo' => $media['isVideo'],
+			'width' => $media['width'],
+			'height' => $media['height'],
+		];
+
+		if ( array_key_exists( 'embed', $media ) ) {
+			$dataAttrs['embed'] = $media['embed'];
 		}
+
+		if ( array_key_exists( 'caption', $media ) ) {
+			$dataAttrs['caption'] = $media['caption'];
+		}
+
+		return $dataAttrs;
+	}
+
+	public static function getDataAttrsForGallery( $media ) {
+		return array_map("self::getDataAttrsForImage", $media );
 	}
 
 	private static function prepareGalleryRows( $media ): array {
@@ -206,14 +201,16 @@ class ArticleAsJson {
 	}
 
 	private static function getGalleryThumbnail( $item, int $width ): string {
-		try {
+		if ( VignetteRequest::isVignetteUrl( $item['url'] ) ) {
 			return VignetteRequest::fromUrl( $item['url'] )
 				->topCrop()
 				->width( $width )
 				->height( $width )
 				->url();
-		} catch (InvalidArgumentException $e) {
-			return '';
+		} else {
+			$file = wfFindFile( $item['title'] );
+
+			return self::getThumbUrl( $file, $width, $width );
 		}
 	}
 
@@ -297,21 +294,7 @@ class ArticleAsJson {
 
 	private static function createMarker( $media, $isGallery = false ) {
 		if ( $isGallery ) {
-			$hasLinkedImages = false;
-
-			// TODO: remove this when new galleries are released
-			if ( count(
-				array_filter(
-					$media,
-					function ( $item ) {
-						return $item['isLinkedByUser'];
-					}
-				)
-			) ) {
-				$hasLinkedImages = true;
-			}
-
-			return self::renderGallery( $media, $hasLinkedImages );
+			return self::renderGallery( $media );
 		} else if ( $media['context'] === self::MEDIA_CONTEXT_ICON ) {
 			return self::renderIcon( $media );
 		} else {
@@ -378,9 +361,6 @@ class ArticleAsJson {
 		global $wgArticleAsJson;
 
 		if ( $wgArticleAsJson ) {
-			// TODO: clean me when new galleries in mobile-wiki are released and cache expires
-			$isNewGalleryLayout = !empty( RequestContext::getMain()->getRequest()->getVal( 'premiumGalleries', false ) );
-
 			$parser = ParserPool::get();
 			$parserOptions = new ParserOptions();
 			$title = F::app()->wg->Title;
@@ -406,26 +386,9 @@ class ArticleAsJson {
 
 				$linkHref = isset( $image['linkhref'] ) ? $image['linkhref'] : null;
 				$mediaObj = self::createMediaObject( $details, $image['name'], $caption, $linkHref );
-				$mediaObj['mediaAttr'] = json_encode( $mediaObj );
 				$mediaObj['galleryRef'] = $index;
-
-				// TODO: clean me when new galleries in mobile-wiki are released and cache expires
-				if (!$isNewGalleryLayout) {
-					try {
-						$mediaObj['thumbnailUrl'] = VignetteRequest::fromUrl( $mediaObj['url'] )
-							->topCrop()
-							->width( 300 )
-							->height( 300 )
-							->url();
-					} catch (InvalidArgumentException $e) {
-						$mediaObj['thumbnailUrl'] = '';
-					}
-				}
-
 				$media[] = $mediaObj;
 			}
-
-			self::$media[] = $media;
 
 			if ( !empty( $media ) ) {
 				$out = self::createMarker( $media, true );
@@ -441,19 +404,19 @@ class ArticleAsJson {
 		return true;
 	}
 
-	public static function onExtendPortableInfoboxImageData( $data, &$ref, &$dataAttrs ) {
-		$title = Title::newFromText( $data['name'] );
+	public static function onExtendPortableInfoboxImageData($title, $data, &$media ) {
 		if ( $title ) {
 			$details = self::getMediaDetailWithSizeFallback( $title, self::$mediaDetailConfig );
 			$details['context'] = $data['context'];
 			$mediaObj = self::createMediaObject( $details, $title->getText(), $data['caption'] );
-			self::$media[] = $mediaObj;
-			$dataAttrs = $mediaObj;
+			$media = $mediaObj;
 
 			if ( $details['context'] == 'infobox-hero-image' && empty( self::$heroImage ) ) {
 				self::$heroImage = $mediaObj;
 
-				try {
+				$height = PortableInfoboxMobileRenderService::MOBILE_THUMBNAIL_WIDTH * 5 / 4;
+
+				if ( VignetteRequest::isVignetteUrl( $mediaObj['url'] ) ) {
 					$height = PortableInfoboxMobileRenderService::MOBILE_THUMBNAIL_WIDTH * 5 / 4;
 					$thumbnail4by5 = VignetteRequest::fromUrl( $mediaObj['url'] )
 						->topCrop()
@@ -473,10 +436,26 @@ class ArticleAsJson {
 						->height( PortableInfoboxMobileRenderService::MOBILE_THUMBNAIL_WIDTH )
 						->url();
 
-				} catch(InvalidArgumentException $e) {
-					$thumbnail4by5 = '';
-					$thumbnail4by5x2 = '';
-					$thumbnail1by1 = '';
+				} else {
+					$file = wfFindFile( $title );
+
+					$thumbnail4by5 = self::getThumbUrl(
+						$file,
+						PortableInfoboxMobileRenderService::MOBILE_THUMBNAIL_WIDTH,
+						$height
+					);
+
+					$thumbnail4by5x2 = self::getThumbUrl(
+						$file,
+						PortableInfoboxMobileRenderService::MOBILE_THUMBNAIL_WIDTH * 2,
+						$height * 2
+					);
+
+					$thumbnail1by1 = self::getThumbUrl(
+						$file,
+						PortableInfoboxMobileRenderService::MOBILE_THUMBNAIL_WIDTH,
+						PortableInfoboxMobileRenderService::MOBILE_THUMBNAIL_WIDTH
+					);
 				}
 
 				self::$heroImage['thumbnail4by5'] = $thumbnail4by5;
@@ -486,11 +465,29 @@ class ArticleAsJson {
 				self::$heroImage['thumbnail1by1'] = $thumbnail1by1;
 				self::$heroImage['thumbnail1by1Size'] = PortableInfoboxMobileRenderService::MOBILE_THUMBNAIL_WIDTH;
 			}
-
-			$ref = count( self::$media ) - 1;
 		}
 
 		return true;
+	}
+
+	/**
+	 * @param File $file
+	 * @param int $width
+	 * @param null $height
+	 * @return string
+	 */
+	private static function getThumbUrl( $file, int $width, $height = null ): string {
+		if ( $file ) {
+			$params = array_filter( [ 'width' => $width, 'height' => $height ] );
+
+			$thumb = $file->transform( $params );
+
+			if ( $thumb ) {
+				return $thumb->getUrl();
+			}
+		}
+
+		return '';
 	}
 
 	public static function onImageBeforeProduceHTML(
@@ -529,10 +526,8 @@ class ArticleAsJson {
 
 			$caption = $frameParams['caption'] ?? null;
 			$media = self::createMediaObject( $details, $title->getText(), $caption, $linkHref );
-			$media['srcset'] = self::getSrcset( $media['url'], intval( $media['width'] ) );
-			$media['thumbnail'] = self::getThumbnailUrlForWidth( $media['url'], 340 );
-
-			self::$media[] = $media;
+			$media['srcset'] = self::getSrcset( $media['url'], intval( $media['width'] ), $file );
+			$media['thumbnail'] = self::getThumbnailUrlForWidth( $media['url'], 340, $file );
 
 			$res = self::createMarker( $media );
 
@@ -542,13 +537,19 @@ class ArticleAsJson {
 		return true;
 	}
 
-	public static function getSrcset( string $url, int $originalWidth ): string {
+	/**
+	 * @param string $url
+	 * @param int $originalWidth
+	 * @param File $file
+	 * @return string
+	 */
+	public static function getSrcset( string $url, int $originalWidth, $file ): string {
 		$widths = [ 284, 340, 732, 985 ];
 		$srcSetItems = [];
 
 		foreach ( $widths as $width ) {
 			if ( $width <= $originalWidth ) {
-				$thumb = self::getThumbnailUrlForWidth( $url, $width );
+				$thumb = self::getThumbnailUrlForWidth( $url, $width, $file );
 				$srcSetItems[] = "${thumb} ${width}w";
 			}
 		}
@@ -556,16 +557,22 @@ class ArticleAsJson {
 		return implode( ',', $srcSetItems );
 	}
 
-	public static function getThumbnailUrlForWidth( string $url, int $requestedWidth ) {
-		try {
-			$url = VignetteRequest::fromUrl( $url )
+	/**
+	 * @param string $url
+	 * @param int $requestedWidth
+	 * @param File $file
+	 * @return string
+	 * @throws Exception
+	 */
+	public static function getThumbnailUrlForWidth( string $url, int $requestedWidth, $file ) {
+		if ( VignetteRequest::isVignetteUrl( $url ) ) {
+			return VignetteRequest::fromUrl( $url )
 				->scaleToWidth( $requestedWidth )
 				->url();
-		} catch(InvalidArgumentException $e) {
-			$url = '';
 		}
 
-		return $url;
+		// XF-741: Handle foreign image repositories, such as Wikimedia Commons
+		return self::getThumbUrl( $file, $requestedWidth );
 	}
 
 	public static function onPageRenderingHash( &$confstr ) {
@@ -591,9 +598,6 @@ class ArticleAsJson {
 		global $wgArticleAsJson;
 
 		if ( $wgArticleAsJson && !is_null( $parser->getRevisionId() ) ) {
-			foreach ( self::$media as &$media ) {
-				self::linkifyMediaCaption( $parser, $media );
-			}
 
 			Hooks::run( 'ArticleAsJsonBeforeEncode', [ &$text ] );
 
@@ -637,24 +641,6 @@ class ArticleAsJson {
 		}
 
 		return true;
-	}
-
-	/**
-	 * Because we take captions out of main parser flow we have to replace links manually
-	 *
-	 * @param Parser $parser
-	 * @param $media
-	 */
-	private static function linkifyMediaCaption( Parser $parser, &$media ) {
-		if ( array_key_exists( 'caption', $media ) ) {
-			$caption = $media['caption'];
-
-			if ( is_string( $caption ) &&
-				( strpos( $caption, '<!--LINK' ) !== false || strpos( $caption, '<!--IWLINK' ) !== false )
-			) {
-				$parser->replaceLinkHolders( $media['caption'] );
-			}
-		}
 	}
 
 	/**

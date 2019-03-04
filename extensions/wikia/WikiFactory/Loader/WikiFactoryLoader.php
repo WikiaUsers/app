@@ -16,6 +16,8 @@ class WikiFactoryLoader {
 	private $parsedUrl = '';
 	/** @var string $langCode Language code given in request path, if present, without a leading slash  */
 	private $langCode = '';
+	/** @var bool $mWikiIdForced set to true if a wiki was forced via X-Mw-Wiki-Id header */
+	private $mWikiIdForced = false;
 
 	// Input variables used to identify wiki in CLI (e.g. maintenance script) context
 	private $mCityID;
@@ -48,7 +50,7 @@ class WikiFactoryLoader {
 	 * @param array $wikiFactoryDomains
 	 */
 	public function  __construct( array $server, array $environment, array $wikiFactoryDomains = [] ) {
-		global $wgDevelEnvironment, $wgExternalSharedDB, $wgWikiaBaseDomain;
+		global $wgDevelEnvironment, $wgExternalSharedDB, $wgWikiaBaseDomain, $wgFandomBaseDomain, $wgCommandLineMode;
 
 		// initializations
 		$this->mOldServerName = false;
@@ -65,9 +67,31 @@ class WikiFactoryLoader {
 			$this->mAlwaysFromDB = 1;
 		}
 
-		$this->mCommandLine = false;
+		/**
+		 * Check if we're running in command line mode
+		 *
+		 * Set a default value of the flag below to avoid /proxy.php requests for closed wikis
+		 * to render a "this wiki is closed" web page
+		 *
+		 * @see SUS-6026
+		 */
+		$this->mCommandLine = $wgCommandLineMode;
 
-		if ( !empty( $server['SERVER_NAME'] ) ) {
+		if ( !empty( $server['HTTP_X_MW_WIKI_ID'] ) ) {
+			// SUS-5816 | a special HTTP request with wiki ID forced via request header
+			$this->mCityID = (int) $server['HTTP_X_MW_WIKI_ID'];
+
+			// fill all required fields so that caching works correctly in
+			// WikiFactoryLoader::execute()
+			$this->parsedUrl = parse_url( WikiFactory::getWikiByID( $this->mCityID )->city_url );
+			$this->mServerName = $this->parsedUrl['host'];
+			$this->langCode = $this->parsedUrl['path'];
+			$this->mWikiIdForced = true;
+
+			// differ CDN caching on X-Mw-Wiki-Id request header value
+			RequestContext::getMain()->getOutput()->addVaryHeader( 'X-Mw-Wiki-Id' );
+		}
+		elseif ( !empty( $server['SERVER_NAME'] ) ) {
 			// normal HTTP request
 			$this->mServerName = strtolower( $server['SERVER_NAME'] );
 			$fullUrl =  self::getCurrentRequestUri( $server );
@@ -100,32 +124,40 @@ class WikiFactoryLoader {
 			// nothing can be done at this point
 			throw new InvalidArgumentException( "Cannot tell which wiki it is (neither SERVER_NAME, SERVER_ID nor SERVER_DBNAME is defined)" );
 		}
+		if ( $wgDevelEnvironment ) {
+			global $wgWikiaDevDomain, $wgFandomDevDomain;
+			if ( endsWith( $this->mServerName, $wgWikiaDevDomain ) ) {
+				$this->mServerName = str_replace( $wgWikiaDevDomain , $wgWikiaBaseDomain, $this->mServerName );
+			} elseif ( endsWith( $this->mServerName, $wgFandomDevDomain ) ) {
+				$this->mServerName = str_replace( $wgFandomDevDomain , $wgFandomBaseDomain, $this->mServerName );
+			}
+		} else {
 
-		/**
-		 * @author Krzysztof Krzyżaniak <eloy@wikia-inc.com>
-		 *
-		 * handle additional domains, we have plenty of domains which should
-		 * redirect to <wikia>.wikia.com. They should be added to
-		 * $wgWikiFactoryDomains variable (which is simple list). When
-		 * additional domain is detected we do simple replace:
-		 *
-		 * muppets.wikia.org => muppets.wikia.com
-		 *
-		 * additionally we remove www. prefix
-		 */
+			/**
+			 * @author Krzysztof Krzyżaniak <eloy@wikia-inc.com>
+			 *
+			 * handle additional domains, we have plenty of domains which should
+			 * redirect to <wikia>.wikia.com. They should be added to
+			 * $wgWikiFactoryDomains variable (which is simple list). When
+			 * additional domain is detected we do simple replace:
+			 *
+			 * muppets.wikia.org => muppets.wikia.com
+			 *
+			 * additionally we remove www. prefix
+			 */
+			foreach ( $wikiFactoryDomains as $domain ) {
+				$tldLength = strlen( $this->mServerName ) - strlen( $domain );
 
-		foreach ( $wikiFactoryDomains as $domain ) {
-			$tldLength = strlen( $this->mServerName ) - strlen( $domain );
-
-			if ( $domain !== $wgWikiaBaseDomain && strpos( $this->mServerName, $domain ) === $tldLength ) {
-				$this->mOldServerName = $this->mServerName;
-				$this->mServerName = str_replace( $domain, $wgWikiaBaseDomain, $this->mServerName );
-				// remove extra www. prefix from domain
-				if ( $this->mServerName !== ( 'www.' . $wgWikiaBaseDomain ) ) {  // skip canonical wikia global host
-					$this->mServerName = preg_replace( "/^www\./", "", $this->mServerName );
+				if ( $domain !== $wgWikiaBaseDomain && strpos( $this->mServerName, $domain ) === $tldLength ) {
+					$this->mOldServerName = $this->mServerName;
+					$this->mServerName = str_replace( $domain, $wgWikiaBaseDomain, $this->mServerName );
+					// remove extra www. prefix from domain
+					if ( $this->mServerName !== ( 'www.' . $wgWikiaBaseDomain ) ) {  // skip canonical wikia global host
+						$this->mServerName = preg_replace( "/^www\./", "", $this->mServerName );
+					}
+					$this->mAlternativeDomainUsed = true;
+					break;
 				}
-				$this->mAlternativeDomainUsed = true;
-				break;
 			}
 		}
 
@@ -135,7 +167,7 @@ class WikiFactoryLoader {
 		 * if run via commandline always take data from database,
 		 * never from cache
 		 */
-		$this->mAlwaysFromDB = $this->mCommandLine || $wgDevelEnvironment;
+		$this->mAlwaysFromDB = $this->mCommandLine || $this->mAlwaysFromDB;
 	}
 
 	/**
@@ -206,7 +238,8 @@ class WikiFactoryLoader {
 	 */
 	public function execute() {
 		global $wgCityId, $wgDBservers, $wgLBFactoryConf, $wgDBserver, $wgContLang,
-			   $wgArticlePath, $wgEnableHTTPSForAnons, $wgFandomBaseDomain;
+			   $wgEnableHTTPSForAnons, $wgFandomBaseDomain, $wgWikiaBaseDomain, $wgDevelEnvironment,
+			   $wgIncludeClosedWikiHandler;
 
 		wfProfileIn(__METHOD__);
 
@@ -223,8 +256,9 @@ class WikiFactoryLoader {
 		}
 
 		// Override wikia.com related config early when requesting a fandom.com wiki
-		if ( strpos( $this->mServerName, '.' . $wgFandomBaseDomain ) !== false ) {
+		if ( !$wgDevelEnvironment && strpos( $this->mServerName, '.' . $wgFandomBaseDomain ) !== false ) {
 			$GLOBALS['wgServicesExternalDomain'] = "https://services.{$wgFandomBaseDomain}/";
+			$GLOBALS['wgServicesExternalAlternativeDomain'] = "https://services.{$wgWikiaBaseDomain}/";
 			$GLOBALS['wgCookieDomain'] = ".{$wgFandomBaseDomain}";
 		}
 
@@ -233,7 +267,6 @@ class WikiFactoryLoader {
 		 * See BugId: 12474
 		 */
 		$wgContLang = new StubObject('wgContLang');
-
 
 		/**
 		 * local cache, change to CACHE_ACCEL for local
@@ -341,6 +374,38 @@ class WikiFactoryLoader {
 						"db"     => $oRow->city_dbname,
 						"cluster" => $oRow->city_cluster,
 					);
+				} elseif ( empty( $this->mWikiID ) && $this->hasLanguagePathWikis() ) {
+					// // no city was found but this is a language wikis index page
+
+					// load the wikis index data from the DB and prepare this->mDomain so this gets cached for the
+					// requested domain
+					$oRow = $dbr->selectRow( ["city_list"],
+						array(
+							"city_public",
+							"city_factory_timestamp",
+							"city_dbname",
+							"city_cluster"
+						),
+						[ "city_id" => WikiFactory::LANGUAGE_WIKIS_INDEX ],
+						__METHOD__ . ':languagewikisindex'
+					);
+					if( isset( $oRow->city_dbname ) ) {
+						$this->mWikiID = WikiFactory::LANGUAGE_WIKIS_INDEX;
+						$this->mCityUrl = 'https://' . $this->mServerName;
+						$this->mIsWikiaActive = $oRow->city_public;
+						$this->mCityDB   = $oRow->city_dbname;
+						$this->mCityCluster = $oRow->city_cluster;
+						$this->mTimestamp = $oRow->city_factory_timestamp;
+						// note, the data below will be cached for 1 day ($this->mExpireDomainCacheTimeout)
+						$this->mDomain = [
+							"id"     => $this->mWikiID,
+							"url"   => $this->mCityUrl,
+							"active" => $oRow->city_public,
+							"time"   => $oRow->city_factory_timestamp,
+							"db"     => $oRow->city_dbname,
+							"cluster" => $oRow->city_cluster,
+						];
+					}
 				}
 			}
 			if( empty($this->mAlwaysFromDB) && !empty( $this->mWikiID ) ) {
@@ -366,7 +431,6 @@ class WikiFactoryLoader {
 			$this->mCityDB = isset( $this->mDomain[ "db" ] ) ? $this->mDomain[ "db" ] : false;
 			$this->mCityCluster = $this->mDomain["cluster"];
 		}
-
 
 		/**
 		 * if wikia is not defined or is marked for closing we redirect to
@@ -423,20 +487,39 @@ class WikiFactoryLoader {
 
 		$url = parse_url( $this->mCityUrl );
 
+		// PLATFORM-3878 - needed while switching community to fandom.com, to be removed afterwards.
+		// For api calls to community, fake the mServerName value so it matches city_url. This
+		// stops the redirects and allows the api to be used on every community domain configured
+		// in WikiFactory.
+		if ( $this->mWikiID == WikiFactory::COMMUNITY_CENTRAL && isset( $this->parsedUrl['path'] ) ) {
+			if ( strpos( $this->parsedUrl['path'], '/api.php' ) === 0 ||
+				 strpos( $this->parsedUrl['path'], '/wikia.php' ) === 0 ||
+				 strpos( $this->parsedUrl['path'], '/api/v1' ) === 0 ) {
+				$this->mServerName = strtolower( $url['host'] );
+			}
+		}
+		// end of PLATFORM-3878 hack
+
 		// check if domain from browser is different than main domain for wiki
-		$cond1 = !empty( $this->mServerName ) &&
+		$cond1 = !empty( $this->mServerName ) && $this->mWikiIdForced === false &&
 				 ( strtolower( $url['host'] ) != $this->mServerName || rtrim( $url['path'] ?? '', '/' ) !== rtrim( "/{$this->langCode}", '/' ) );
 
 		/**
 		 * check if not additional domain was used (then we redirect anyway)
 		 */
 		$cond2 = $this->mAlternativeDomainUsed &&
-			( $url['host'] != WikiFactory::normalizeHost( $this->mOldServerName ) );
+			( $url['host'] != wfNormalizeHost( $this->mOldServerName ) );
 
 		$redirectUrl = WikiFactory::getLocalEnvURL( $this->mCityUrl );
-		$shouldUseHttps = ( $wgEnableHTTPSForAnons || !empty( $_SERVER['HTTP_FASTLY_SSL'] ) ) &&
-			wfHttpsAllowedForURL( $redirectUrl ) &&
-			!empty( $_SERVER['HTTP_FASTLY_FF'] );	// don't redirect internal clients
+		$shouldUseHttps = wfHttpsAllowedForURL( $redirectUrl ) &&
+			(
+				wfHttpsEnabledForURL( $redirectUrl ) ||
+				$wgEnableHTTPSForAnons ||
+				!empty( $_SERVER['HTTP_FASTLY_SSL'] )
+			) &&
+			// don't redirect internal clients
+			!empty( $_SERVER['HTTP_FASTLY_FF'] );
+
 		$shouldUpgradeToHttps = $shouldUseHttps && empty( $_SERVER['HTTP_FASTLY_SSL'] );
 
 		if ( $cond1 || $cond2 || $shouldUpgradeToHttps ) {
@@ -465,7 +548,7 @@ class WikiFactoryLoader {
 					$redirectUrl, 301, $redirectedBy );
 			} else {
 				header( 'X-Redirected-By-WF: ' . $redirectedBy );
-				header( 'Vary: Cookie,Accept-Encoding' );
+				header( RequestContext::getMain()->getOutput()->getVaryHeader() );
 
 				global $wgCookiePrefix;
 				$hasAuthCookie = !empty( $_COOKIE[\Wikia\Service\User\Auth\CookieHelper::ACCESS_TOKEN_COOKIE_NAME] ) ||
@@ -492,7 +575,7 @@ class WikiFactoryLoader {
 		if( empty( $this->mIsWikiaActive ) || $this->mIsWikiaActive == -2 /* spam */ ) {
 			if( ! $this->mCommandLine ) {
 				if ( $this->mCityDB ) {
-					include __DIR__ . '/closedWikiHandler.php';
+					$wgIncludeClosedWikiHandler = true;
 				} else {
 					global $wgNotAValidWikia;
 					$redirect = $wgNotAValidWikia . '?from=' . rawurlencode( $this->mServerName );
@@ -834,6 +917,19 @@ class WikiFactoryLoader {
 	 */
 	private function debug( $message ) {
 		wfDebug("wikifactory: {$message}", true);
+	}
+
+	/**
+	 * Check whether the current wiki is at the root of the domain and has language wikis hosted under path prefixes.
+	 * @return bool
+	 */
+	private function hasLanguagePathWikis() {
+		if ( empty( $this->langCode ) ) {
+			if ( count( WikiFactory::getWikisUnderDomain( $this->mServerName, false ) ) > 0 ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

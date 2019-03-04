@@ -9,19 +9,47 @@ When a user clicks "Request a dump":
 1. `DumpsOnDemandTask.php` is queued with the given wiki id.
 1. XML dumps (the full one and with current versions of articles only) are created locally and then uploaded to Amazon's S3 storage.
 
-### Nagios check
+### Prometheus check
 
-We have a Nagios check that keeps track of a length of the queue of unprocessed dump requests. It issues the following query:
+We have a Prometheus check that keeps track of a length of the queue of pending and failed dump requests. The following queries are made:
 
 ```sql
-mysql>select count(distinct dump_wiki_id) as queue_size from dumps where dump_completed is null;
+-- pending dump requests (i.e. to be processed)
+mysql>SELECT COUNT(distinct dump_wiki_id) AS queue_size FROM dumps WHERE dump_completed IS NULL AND dump_hold = 'N'
 +------------+
 | queue_size |
 +------------+
 |        670 |
 +------------+
+
+-- failed dump requests
+mysql>SELECT COUNT(distinct dump_wiki_id) AS queue_size FROM dumps WHERE dump_completed IS NULL AND dump_hold = 'Y'
++------------+
+| queue_size |
++------------+
+|          5 |
++------------+
+```
+
+Failed dumps can be retried by pushing them back to the queue:
+
+```php
+$wgUser = User::newFromName('Macbre')
+DumpsOnDemand::queueDump(304 /* wiki ID */, false /* is dump hidden */, false /* is wiki closed */);
+Wikia\Factory\ServiceFactory::instance()->rabbitFactory()->taskPublisher()->doUpdate()
 ```
 
 ### Logs
 
 The task script logs to Kibana, you can search by `@context.task_call:"Wikia\\Tasks\\Tasks\\DumpsOnDemandTask"`. Refer to it when Nagios check fails.
+
+
+### SQL queries
+
+
+```sql
+DumpsOnDemand::getLatestDumpInfo 99.73% [ap] db:wikicities | SELECT dump_completed,dump_compression FROM `dumps` WHERE (dump_completed IS NOT NULL) AND dump_wiki_id = X ORDER BY dump_completed DESC LIMIT N
+Wikia\Tasks\Tasks\DumpsOnDemandTask::dump 0.04% [cron] db:wikicities | UPDATE `dumps` SET dump_compression = X,dump_hold = X,dump_errors = X WHERE dump_wiki_id = X AND (dump_completed IS NULL) AND dump_hold = X
+Wikia\Tasks\Tasks\DumpsOnDemandTask::dump 0.05% [task] db:wikicities | SELECT dump_hold FROM `dumps` WHERE dump_wiki_id = X ORDER BY dump_requested DESC LIMIT N
+DumpsOnDemand::queueDump 0.07% [ap] db:wikicities | INSERT INTO `dumps` (dump_wiki_id,dump_user_id,dump_requested,dump_closed) VALUES (XYZ)
+```

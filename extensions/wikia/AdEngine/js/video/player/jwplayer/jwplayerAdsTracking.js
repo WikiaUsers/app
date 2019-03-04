@@ -1,5 +1,5 @@
 /*global define*/
-define('ext.wikia.adEngine.video.player.jwplayer.adsTracking', [
+define('ext.wikia.adEngine.video.player.jwplayer.adsTracker', [
 	'ext.wikia.adEngine.utils.eventDispatcher',
 	'ext.wikia.adEngine.video.player.jwplayer.jwplayerTracker',
 	'ext.wikia.adEngine.video.vastParser'
@@ -28,30 +28,50 @@ define('ext.wikia.adEngine.video.player.jwplayer.adsTracking', [
 		});
 	}
 
-	return function(player, params) {
-		tracker.track(params, 'init');
+	return {
+		track: function (params, eventName) {
+			tracker.track(params, eventName);
+		},
 
-		player.on('adComplete', function () {
-			clearParams(params);
-		});
+		register: function (player, params) {
+			params.withCtp = !player.getConfig().autostart;
+			params.withAudio = !player.getConfig().mute;
 
-		player.on('adError', function (event) {
-			dispatchStatus(event.tag, params, 'error');
-			clearParams(params);
-		});
+			tracker.track(params, 'init');
 
-		player.on('adRequest', function (event) {
-			var currentAd = vastParser.getAdInfo(event.ima && event.ima.ad);
+			player.on('videoStart', function () {
+				clearParams(params);
+			});
 
-			params.lineItemId = currentAd.lineItemId;
-			params.creativeId = currentAd.creativeId;
-			params.contentType = currentAd.contentType;
-		});
+			player.on('adError', function (event) {
+				dispatchStatus(event.tag, params, 'error');
+			});
 
-		player.on('adImpression', function (event) {
-			dispatchStatus(event.tag, params, 'success');
-		});
+			player.on('adRequest', function (event) {
+				var currentAd = vastParser.getAdInfo(event.ima && event.ima.ad);
 
-		tracker.register(player, params);
+				params.lineItemId = currentAd.lineItemId;
+				params.creativeId = currentAd.creativeId;
+				params.contentType = currentAd.contentType;
+			});
+
+			player.on('adImpression', function (event) {
+				dispatchStatus(event.tag, params, 'success');
+			});
+
+			tracker.register(player, params);
+
+			player.on('adError', function () {
+				clearParams(params);
+			});
+		}
 	};
+});
+
+// We need to keep it in order to be compatible with adsTracking function on mobile-wiki
+// TODO: Remove once we switch globally to AE3 on mobile-wiki
+define('ext.wikia.adEngine.video.player.jwplayer.adsTracking', [
+	'ext.wikia.adEngine.video.player.jwplayer.adsTracker'
+], function (tracker) {
+	return tracker.register;
 });

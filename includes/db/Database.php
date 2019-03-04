@@ -202,8 +202,8 @@ interface DatabaseType {
  */
 abstract class DatabaseBase implements DatabaseType {
 
-	// @const log 5% of queries (increased from 1% in SUS-2974)
-	const QUERY_SAMPLE_RATE = 0.05;
+	// @const log 1% of queries
+	const QUERY_SAMPLE_RATE = 0.01;
 
 	// @const log queries that took more than 15 seconds
 	const SLOW_QUERY_LOG_THRESHOLD = 15;
@@ -3926,6 +3926,17 @@ abstract class DatabaseBase implements DatabaseType {
 		}
 
 		return $this->sampler;
+	}
+
+	/**
+	 * Execute multiple SQL queries concatenated with a semicolon delimiter in a single operation
+	 *
+	 * @param string $sqlQuery queries to execute
+	 * @param string $method name of caller function
+	 * @return bool true if operation was successful
+	 */
+	public function multiQuery( string $sqlQuery, string $method ): bool {
+		return false;
 	}
 
 	public function setSampler( BernoulliTrial $sampler ) {
